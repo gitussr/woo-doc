@@ -1,0 +1,108 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+/* ------------------------------------------------------------------ *
+ * WooDoc visual identity
+ *
+ * Color theme follows Laravel Nightwatch docs:
+ *   - near-black page background (#0a0b0d)
+ *   - low-contrast hairline borders (#27292c)
+ *   - off-white headings (#e0e2e6), grey body text (#a0a2a6)
+ *   - blue-500 (#3b82f6) as the single accent — links, active nav,
+ *     primary buttons
+ *   - very dark elevated code surface (#0b0c0e)
+ * WooDoc keeps its own name, logo mark, and content components; only
+ * the palette is shared.
+ * ------------------------------------------------------------------ */
+
+:root {
+  /* Accent */
+  --woo-accent: #3b82f6;
+
+  /* Semantic accents used by WooDoc content components */
+  --woo-safe: #0f9d8f; /* recommended extension point */
+  --woo-caution: #b7791f; /* possible but risky */
+  --woo-danger: #e11d48; /* dangerous / core edit */
+  --woo-info: #2563eb; /* neutral note */
+
+  /* Fumadocs token overrides (light counterpart to the dark theme) */
+  --color-fd-primary: var(--woo-accent);
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-ring: var(--woo-accent);
+  --color-fd-accent: #eef4ff;
+  --color-fd-accent-foreground: #1e3a8a;
+}
+
+.dark {
+  --woo-accent: #3b82f6;
+  --woo-safe: #2dd4bf;
+  --woo-caution: #f5a623;
+  --woo-danger: #f43f5e;
+  --woo-info: #60a5fa;
+
+  /* Surfaces */
+  --color-fd-background: #0a0b0d;
+  --color-fd-card: #131417;
+  --color-fd-popover: #131417;
+  --color-fd-muted: #17181a;
+  --color-fd-secondary: #17181a;
+  --color-fd-border: #27292c;
+
+  /* Text */
+  --color-fd-foreground: #e0e2e6;
+  --color-fd-muted-foreground: #a0a2a6;
+  --color-fd-secondary-foreground: #e0e2e6;
+  --color-fd-card-foreground: #e0e2e6;
+  --color-fd-popover-foreground: #e0e2e6;
+
+  /* Accent — blue text on a faint blue wash, like Nightwatch's active nav */
+  --color-fd-primary: var(--woo-accent);
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-ring: var(--woo-accent);
+  --color-fd-accent: #16202e;
+  --color-fd-accent-foreground: #cddffb;
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+body {
+  font-family: var(--font-woodoc-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Nightwatch-style heading rhythm: large, tightly tracked h1;
+ * compact bordered section headings. */
+.prose h1 {
+  letter-spacing: -0.025em;
+}
+
+.prose h2 {
+  letter-spacing: -0.015em;
+}
+
+/* Fumadocs' prose adds automatic open-quote / close-quote pseudo-elements to
+ * every blockquote. WooDoc uses blockquotes both for real quotations (where we
+ * write the quote marks ourselves) and for emphasized callouts (where quote
+ * marks would be wrong), so disable the automatic ones. */
+blockquote p:first-of-type::before,
+blockquote p:last-of-type::after {
+  content: '' !important;
+}
+
+/* Code should feel first-class */
+code,
+pre {
+  font-family: var(--font-woodoc-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
+.dark pre,
+.dark .shiki {
+  background-color: #0b0c0e !important;
+}

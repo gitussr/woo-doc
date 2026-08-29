@@ -1,0 +1,149 @@
+---
+title: Where Does This Come From?
+description: WooDoc's signature pattern for tracing any WooCommerce element back to the layer that produced it — and deciding where it is safe to change.
+---
+
+<PageMeta priority="P0" audience="Beginner → Advanced" />
+
+This is the pattern WooDoc is built around. When you see any WooCommerce
+element — a button, a field, a line of totals, a message, an email — you
+should be able to walk a short, repeatable path from *"what is this?"* to
+*"where do I safely change it?"*.
+
+Later steps of WooDoc apply this pattern to concrete elements (the add-to-cart
+button, checkout fields, order-status emails, and so on). This page teaches
+the pattern itself.
+
+## The five questions
+
+<Lifecycle
+  steps={[
+    'What am I looking at?',
+    'Where does it come from?',
+    'What controls it?',
+    'What can I safely modify?',
+    'What should I avoid?',
+  ]}
+  caption="Ask these in order. Each answer narrows where the change belongs."
+/>
+
+## Walking each question
+
+### 1. What am I looking at?
+
+Name the element precisely. "The price" is ambiguous; "the sale price shown on
+the single product page" is not. Is it text, a form control, a link, a
+computed value, a status message?
+
+### 2. Where does it come from?
+
+Identify the **layer** that emitted it:
+
+<LayerStack
+  layers={[
+    { name: 'A classic PHP template', note: 'a file under templates/ that your theme can override' },
+    { name: 'A template hook', note: 'an action like woocommerce_* that echoes markup at a position' },
+    { name: 'A WooCommerce Block', note: 'React output; customized via block settings, Slot/Fill, or Store API' },
+    { name: 'A shortcode', note: 'e.g. legacy [woocommerce_cart] style output' },
+    { name: 'JavaScript', note: 'client-side rendering, cart fragments, or event handlers' },
+    { name: 'An AJAX / Store API response', note: 'markup or JSON fetched after page load' },
+    { name: 'A filtered value', note: 'a number or string passed through a filter before display' },
+  ]}
+/>
+
+Practical tells: view source vs. inspect the live DOM (a difference means JS or
+AJAX built it); search the WooCommerce `templates/` directory for visible
+static text; check whether the value changes without a full page reload
+(fragments / Blocks).
+
+### 3. What controls it?
+
+Once you know the layer, find the specific control point: the template file and
+the hook fired inside it, the filter applied to the value, the block and its
+settings, or the script and the endpoint it calls.
+
+### 4. What can I safely modify?
+
+Map the control point to a **safety level**:
+
+<SafetyLevel level="recommended">
+  There is a hook or filter for exactly this. Use it from a plugin or
+  `mu-plugin`. First choice, every time.
+</SafetyLevel>
+
+<SafetyLevel level="risky">
+  No hook reaches it, but the template can be overridden in your theme, or a
+  block exposes a Slot/Fill. Acceptable — record that you now maintain that
+  override against future WooCommerce updates.
+</SafetyLevel>
+
+<SafetyLevel level="dangerous">
+  The only way to change it is editing a core file or relying on an internal
+  that has no stability promise. Stop and find another approach.
+</SafetyLevel>
+
+### 5. What should I avoid?
+
+State the thing not to do and why: do not edit the core template in place; do
+not change the displayed value without changing the calculated value; do not
+hook a stage that does not fire under the active cart/checkout implementation.
+
+## Worked shape (illustrative)
+
+<WhereFrom
+  looking={<>The <strong>"Add to cart" button</strong> on a single product page.</>}
+  origin={
+    <>
+      A classic template renders the single-product summary; an action hook
+      inside it outputs the add-to-cart form for the product type.
+      <VerifyNote>template path + hook name for 11.0.1</VerifyNote>
+    </>
+  }
+  controls={
+    <>
+      The hook that prints the form, filters on the button text and URL, and
+      the product's type/purchasability. On AJAX-enabled archives, a script
+      also intercepts the click.
+    </>
+  }
+  safe={
+    <>
+      Filter the button text or URL; add markup via the surrounding action
+      hooks; enqueue your own script for behavior. All from a plugin.
+    </>
+  }
+  avoid={
+    <>
+      Editing <code>single-product/add-to-cart/*.php</code> in the WooCommerce
+      plugin directory; assuming the archive button and the single-product
+      button share one code path.
+    </>
+  }
+/>
+
+<VersionNote version="WooCommerce 11.0.1">
+  The concrete file paths, hook names, and script handles referenced across
+  WooDoc are being verified against this version. Anything not yet confirmed is
+  marked with a <VerifyNote /> tag.
+</VersionNote>
+
+## Why this pattern matters
+
+It converts "WooCommerce is a black box" into a **finite lookup**. You are
+never guessing — you are walking layers from output back to source, and
+stopping at the safest one that can do the job.
+
+## Related
+
+<Cards>
+  <Card
+    title="Developer Mental Model"
+    href="/docs/introduction/developer-mental-model"
+    description="The layers, lifecycle, safety levels, and ripple this pattern draws on."
+  />
+  <Card
+    title="Documentation Design System"
+    href="/docs/about/design-system"
+    description="The page templates and components that encode this pattern."
+  />
+</Cards>

@@ -1,0 +1,154 @@
+---
+title: Project Definition
+description: WooDoc's mission, audience, the problem it solves, its philosophy, what makes it different, and its developer-experience principles.
+---
+
+<PageMeta priority="P0" audience="Contributors & stakeholders" />
+
+This page is the reference definition of WooDoc. Later steps of the project
+should be measured against it.
+
+## Mission
+
+WooDoc is a **developer-first WooCommerce documentation and engineering
+reference**.
+
+> Give developers enough understanding and visibility into WooCommerce that it
+> stops feeling like a black box.
+
+It is explicitly **not** another "how to use WooCommerce" tutorial. The goal
+is to help developers understand WooCommerce deeply enough to confidently:
+
+- Build WooCommerce sites from scratch.
+- Customize WooCommerce safely.
+- Understand where functionality comes from.
+- Find the correct hook, filter, template, file, class, function, setting, or
+  extension point.
+- Understand WooCommerce's internal architecture.
+- Debug unexpected WooCommerce behavior.
+- Modify layouts and functionality without blindly copying snippets.
+- Understand how WooCommerce interacts with WordPress.
+- Understand what WooCommerce can and cannot realistically do.
+- Make architectural decisions before writing code.
+
+## Audience
+
+| Segment | Starting point | What they struggle with |
+| --- | --- | --- |
+| **Beginner WooCommerce developer** | Knows HTML, CSS, PHP, WordPress, themes, plugins | Gets lost the moment WooCommerce is involved |
+| **Intermediate WordPress developer** | Can build WordPress sites | Templates, hooks, filters, cart, checkout, product architecture, AJAX, orders, payments, shipping, database, HPOS, Blocks |
+| **Advanced developer** | Ships production WordPress | Wants architecture, extension points, internal data flow, debugging strategy, performance, safe patterns, and an honest account of limits |
+
+WooDoc serves all three through **progressive complexity**: plain explanation
+first, precise developer terminology second.
+
+## The problem
+
+WooCommerce functionality is **distributed**. A single visible element may be
+governed by WordPress, WooCommerce core, a template, a hook, a filter, PHP,
+JavaScript, AJAX, a REST endpoint, a block, a database value, an extension, or
+a theme customization.
+
+Typical documentation hands developers a snippet. That teaches *what to type*,
+not *why it works*, *where else it could be done*, or *what it puts at risk*.
+WooDoc connects the pieces.
+
+## Philosophy
+
+WooDoc teaches developers to think differently. Instead of only asking *"how
+do I change this button?"*, a developer learns to ask, in order:
+
+<Lifecycle
+  steps={[
+    'Where does this button come from?',
+    'Which WooCommerce layer controls it?',
+    'Template, hook, filter, JS event, AJAX, block, shortcode, or PHP?',
+    'What is the safest extension point?',
+    'What are the consequences of changing it?',
+  ]}
+/>
+
+Two principles carry through every page:
+
+<SafetyLevel level="recommended" title="Extension points, not hacks">
+  Clearly separate **recommended extension** (official hooks, filters, APIs,
+  supported template mechanisms, proper plugin architecture) from **risky
+  customization** (template overrides, behavior replacement) and **dangerous
+  customization** (editing core, relying on fragile internals).
+</SafetyLevel>
+
+<SafetyLevel level="risky" title="Technical honesty about limits">
+  Document what WooCommerce does out of the box, what needs customization,
+  what needs an extension, what needs external infrastructure, what is
+  possible but architecturally undesirable, and when a different technology is
+  the better choice. Do not blindly promote WooCommerce.
+</SafetyLevel>
+
+## Differentiator
+
+Most WooCommerce resources are **recipe collections**. WooDoc is a
+**reference that builds a mental model**:
+
+- Every topic is traced to the **layer** that owns it.
+- Every customization is labeled with a **safety level**.
+- Every significant change notes its **downstream ripple**.
+- Version-specific and classic-vs-Blocks differences are called out
+  explicitly.
+- Accuracy is a hard rule: no invented hooks, paths, or behavior.
+
+## DX principles
+
+A developer arriving on any WooDoc page should be able to answer quickly:
+
+1. What is this?
+2. Where does it live?
+3. Why does it exist?
+4. When should I use it?
+5. How do I customize it?
+6. What should I **not** change?
+7. What happens internally?
+8. What can break?
+9. What is the recommended approach?
+10. Where do I go next?
+
+Page structure therefore favors:
+
+> **Concept → Location → Decision → Implementation → Warning → Example → Related**
+
+over long articles that bury the answer.
+
+## Accuracy rules
+
+- Do not invent hooks, template paths, classes, or behavior.
+- Do not assume a feature exists or present guesses as facts.
+- Distinguish documented APIs from internal implementation details.
+- Identify version-specific behavior explicitly.
+- Note where classic templates and WooCommerce Blocks differ.
+- Note where extensions change the picture.
+- Keep WordPress and WooCommerce terminology precise.
+
+<VersionNote version="WordPress 7.1 · WooCommerce 11.0.1">
+  The current target versions. In this Step 1 release, conceptual content is
+  written from knowledge and every concrete API-level claim that still needs a
+  source check is tagged <VerifyNote />.
+</VersionNote>
+
+## Related
+
+<Cards>
+  <Card
+    title="Information Architecture"
+    href="/docs/about/information-architecture"
+    description="How the documentation is organized and prioritized."
+  />
+  <Card
+    title="Documentation Design System"
+    href="/docs/about/design-system"
+    description="The reusable page patterns built from these principles."
+  />
+  <Card
+    title="Roadmap"
+    href="/docs/about/roadmap"
+    description="How WooDoc grows from here."
+  />
+</Cards>

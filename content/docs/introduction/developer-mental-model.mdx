@@ -1,0 +1,180 @@
+---
+title: Developer Mental Model
+description: Building on WooCommerce is not building a brochure or blog site. This chapter introduces the dimensions a WooCommerce developer has to think in, and how one small change ripples through the system.
+---
+
+<PageMeta priority="P0" audience="Beginner → Intermediate" />
+
+If your background is WordPress themes and content sites, WooCommerce will
+feel deceptively familiar — same admin, same hooks, same templates — and then
+suddenly unfamiliar the moment you touch anything commerce-related. This
+chapter is about the shift in thinking that closes that gap.
+
+We introduce the idea here and link outward. Later steps of WooDoc expand
+each layer in depth.
+
+## A blog site is one dimension. A store is several.
+
+On a brochure or blog site, most work is **one-dimensional**: content goes in,
+markup comes out. Change the template, change the output.
+
+A store forces you to think in **multiple dimensions at once**, because a
+single visible thing is the result of business rules, a lifecycle, data, and
+often an external service:
+
+<LayerStack
+  layers={[
+    { name: 'UI', note: 'what the customer sees — template, block, or script output' },
+    { name: 'Business rules', note: 'pricing, discounts, tax, stock, shipping eligibility, validation' },
+    { name: 'WooCommerce lifecycle', note: 'cart → checkout → order → payment → fulfilment, each with defined steps' },
+    { name: 'Hooks / filters / APIs', note: 'the sanctioned places to change any of the above' },
+    { name: 'Data', note: 'product meta, cart/session, order records, customer records, HPOS tables' },
+    { name: 'External services', note: 'payment gateways, shipping/tax providers, email, ERP — reached by API or webhook' },
+  ]}
+  caption="A WooCommerce change usually touches more than one of these. Naming which ones is the first step."
+/>
+
+## The question is not "how do I change the output"
+
+A theme developer asks:
+
+> "How do I change the displayed price?"
+
+A WooCommerce developer eventually learns to ask:
+
+<Lifecycle
+  steps={[
+    'Which price am I changing — catalog display, cart line, or order line?',
+    'Is it a display format change or an actual value change?',
+    'If it is a value change, what recalculates because of it?',
+    'What is the sanctioned hook or API for that, and at what layer?',
+    'What are the consequences downstream — tax, totals, payment, reports, email?',
+  ]}
+/>
+
+Because in WooCommerce, "the price" is not one thing in one place.
+
+## One change ripples
+
+Suppose you change a product's price. Here is the chain of things that can
+depend on that value:
+
+<Lifecycle
+  steps={[
+    'Product price',
+    'Cart line subtotal',
+    'Coupon / discount calculation',
+    'Fees',
+    'Tax calculation',
+    'Shipping (if rules depend on cart value)',
+    'Order total',
+    'Payment amount charged',
+    'Order + order item records',
+    'Transactional email contents',
+    'Reports and analytics',
+  ]}
+  caption="Not every change touches every step — but you should know which steps yours touches before you ship it."
+/>
+
+<SafetyLevel level="risky" title="Why the naive fix bites">
+  Overriding the price in the template changes the *number on the screen* but
+  not the *number WooCommerce calculates with*. The customer sees one price and
+  is charged another. The correct layer for a value change is a pricing filter
+  or the cart calculation stage — not the display template.
+</SafetyLevel>
+
+<VerifyNote>exact filter names for catalog price vs cart line price in 11.0.1</VerifyNote>
+
+## Three layers of "where a change belongs"
+
+Every customization sits at one of three safety levels. WooDoc labels them
+consistently:
+
+<SafetyLevel level="recommended">
+  **Recommended extension** — official hooks, filters, and APIs; supported
+  template mechanisms; a properly structured plugin or `mu-plugin`. Survives
+  updates. This is the default answer.
+</SafetyLevel>
+
+<SafetyLevel level="risky">
+  **Possible but risky** — overriding a template by copying it into your
+  theme, or replacing a whole subsystem. Sometimes the right call, but you now
+  own that copy forever and must re-check it on every WooCommerce update.
+</SafetyLevel>
+
+<SafetyLevel level="dangerous">
+  **Dangerous** — editing WooCommerce core files, or depending on private
+  internal behavior that has no stability guarantee. Breaks on update, breaks
+  silently, and breaks other people's expectations.
+</SafetyLevel>
+
+You will see these three labels throughout WooDoc. The recurring lesson:
+
+> **"Just because I can change it there does not mean I should."**
+
+## Think in the lifecycle, not the page
+
+A brochure site has pages. WooCommerce has a **lifecycle** that pages are
+windows into:
+
+<Lifecycle
+  steps={[
+    'Catalog — products are displayed and queried',
+    'Cart — a per-visitor, recalculated collection of items',
+    'Checkout — address, validation, payment method, order creation',
+    'Order — a persisted record with a status and a history',
+    'Payment — authorization / capture, redirects, webhooks',
+    'Fulfilment — stock, downloads, shipping, notifications',
+  ]}
+  caption="The high-level WooCommerce lifecycle. Most 'why is this happening?' questions resolve to 'which stage am I in, and what fires there?'"
+/>
+
+When something behaves unexpectedly, the first diagnostic question is usually
+*which stage of this lifecycle am I in, and what code runs at that stage* —
+not *which template rendered this*.
+
+## What this means in practice
+
+- **Locate before you edit.** Identify the layer and lifecycle stage first.
+  The [Where Does This Come From?](/docs/introduction/where-does-this-come-from)
+  pattern is built for exactly this.
+- **Change values at the calculation layer, formatting at the display layer.**
+  Do not confuse the two.
+- **Prefer the highest-safety layer that can do the job.** Hook or filter
+  first; template override only when a hook cannot reach it; never core.
+- **Trace the ripple.** Before shipping, list what downstream steps your
+  change affects and confirm each still behaves.
+- **Respect classic vs Blocks.** The same customization can require different
+  techniques depending on which cart/checkout implementation is active.
+
+## Do not over-learn this yet
+
+You do not need to memorize the full lifecycle now. The goal of this chapter
+is only to install the *shape* of the problem:
+
+> WooCommerce work is multi-dimensional. A change has a **layer**, a
+> **lifecycle stage**, a **safety level**, and a **ripple**. Name all four
+> before you write code.
+
+Later steps of WooDoc document each stage — cart calculation, checkout,
+order lifecycle, payment flow, email flow — in detail.
+
+## Related
+
+<Cards>
+  <Card
+    title="Where Does This Come From?"
+    href="/docs/introduction/where-does-this-come-from"
+    description="The step-by-step pattern for locating any WooCommerce element."
+  />
+  <Card
+    title="Why WooCommerce?"
+    href="/docs/introduction/why-woocommerce"
+    description="The trade-offs you are working within."
+  />
+  <Card
+    title="Roadmap"
+    href="/docs/about/roadmap"
+    description="Where each lifecycle stage gets documented in depth."
+  />
+</Cards>

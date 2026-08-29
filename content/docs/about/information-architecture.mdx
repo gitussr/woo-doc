@@ -1,0 +1,249 @@
+---
+title: Information Architecture
+description: The full WooDoc documentation map — every planned section with its purpose, audience, priority, what belongs there, and what does not.
+---
+
+<PageMeta priority="P0" audience="Contributors & stakeholders" status="Living structure · not a final commitment" />
+
+This is the **living architecture** of WooDoc. It is designed for
+searchability and discoverability: a developer should be able to predict which
+section a topic lives in.
+
+Only a few pages exist today (see [Roadmap](/docs/about/roadmap)). This page
+defines the shape everything else will fill.
+
+## Priority levels
+
+WooDoc tags pages with a priority so contributors and readers know what is
+foundational versus specialized.
+
+| Level | Meaning |
+| --- | --- |
+| <PriorityBadge level="P0" /> | A developer cannot properly understand WooCommerce without this. |
+| <PriorityBadge level="P1" /> | Important for day-to-day WooCommerce development. |
+| <PriorityBadge level="P2" /> | Important for deeper customization and architecture. |
+| <PriorityBadge level="P3" /> | Useful for advanced or niche scenarios. |
+| <PriorityBadge level="P4" /> | Deep technical / reference lookup material. |
+
+## The tree
+
+```text
+WooDoc
+├── Introduction
+│   ├── What is WooCommerce?
+│   ├── Why WooCommerce?
+│   ├── WooCommerce vs WordPress
+│   ├── How WooCommerce Thinks
+│   └── Developer Mental Model
+│
+├── Foundations
+│   ├── WordPress Fundamentals
+│   ├── WooCommerce Architecture
+│   ├── WooCommerce Data Model
+│   └── WooCommerce Extension Model
+│
+├── Store Setup
+│   ├── Store Settings
+│   ├── Products
+│   ├── Customers
+│   ├── Orders
+│   ├── Payments
+│   ├── Shipping
+│   └── Taxes
+│
+├── Development
+│   ├── Hooks
+│   ├── Filters
+│   ├── Templates
+│   ├── Shortcodes
+│   ├── Blocks
+│   ├── AJAX
+│   ├── REST API
+│   └── JavaScript
+│
+├── Products
+├── Cart
+├── Checkout
+├── Orders
+├── Payments
+├── Shipping
+├── Customers
+├── Emails
+├── Database
+├── HPOS
+├── Customization
+├── Debugging
+├── Performance
+├── Security
+└── Limitations
+```
+
+<Callout type="info">
+  This structure will change as WooDoc grows. Simplified diagrams get replaced
+  with accurate architecture diagrams; sections split or merge as content
+  arrives. Do not treat it as final.
+</Callout>
+
+## Section reference
+
+### Introduction
+
+- **Purpose** — orient a WordPress developer: what WooCommerce is, why it
+  exists, how it differs from plain WordPress work, and how to think about it.
+- **Audience** — beginner to intermediate.
+- **Priority** — <PriorityBadge level="P0" />
+- **Belongs here** — conceptual framing, the "why", the mental model, the
+  "where does this come from?" pattern.
+- **Does not belong here** — API reference, step-by-step configuration, code
+  recipes.
+
+### Foundations
+
+- **Purpose** — the load-bearing concepts: the WordPress features WooCommerce
+  builds on, WooCommerce's own architecture, its data model, and its
+  extension model.
+- **Audience** — intermediate; advanced for the architecture depth.
+- **Priority** — <PriorityBadge level="P0" /> to <PriorityBadge level="P1" />
+- **Belongs here** — how the request lifecycle works, how data stores and CRUD
+  classes are organized, how hooks/filters/templates/blocks fit together as an
+  extension system.
+- **Does not belong here** — task guides, admin walkthroughs, per-feature
+  reference (those live in the feature sections).
+
+### Store Setup
+
+- **Purpose** — the admin-facing configuration surface: settings, and the
+  setup of products, customers, orders, payments, shipping, and taxes.
+- **Audience** — beginner to intermediate.
+- **Priority** — <PriorityBadge level="P1" />
+- **Belongs here** — what each settings screen controls, how configuration
+  maps to stored options, and the developer-relevant consequences of each
+  choice.
+- **Does not belong here** — deep internals and extension development (those
+  live in the matching feature section and in Development).
+
+### Development
+
+- **Purpose** — the extension toolkit: hooks, filters, templates, shortcodes,
+  blocks, AJAX, REST, and JavaScript — how each mechanism works and when to
+  reach for it.
+- **Audience** — intermediate to advanced.
+- **Priority** — <PriorityBadge level="P1" /> to <PriorityBadge level="P2" />
+- **Belongs here** — the mechanics of each extension point, safety levels,
+  and cross-cutting patterns (plugin vs mu-plugin vs theme, enqueueing, nonce
+  handling).
+- **Does not belong here** — exhaustive per-hook catalog entries (those are
+  reference pages under the relevant feature section, tagged
+  <PriorityBadge level="P4" />).
+
+### Feature sections — Products, Cart, Checkout, Orders, Payments, Shipping, Customers, Emails
+
+- **Purpose** — one deep, self-contained treatment per subsystem: what it is,
+  where it lives, its lifecycle, its data, its hooks/filters/templates/blocks,
+  its gotchas, and its safe customization patterns.
+- **Audience** — intermediate to advanced.
+- **Priority** — <PriorityBadge level="P1" /> for the concepts,
+  <PriorityBadge level="P4" /> for the reference tables within them.
+- **Belongs here** — the full "where does this come from?" treatment for every
+  significant element of that subsystem, plus classic-vs-Blocks notes.
+- **Does not belong here** — generic extension mechanics (link to Development
+  instead), unrelated subsystems.
+
+### Database
+
+- **Purpose** — how WooCommerce stores data: core WordPress tables it uses,
+  WooCommerce's custom tables, meta usage, and query patterns.
+- **Audience** — advanced.
+- **Priority** — <PriorityBadge level="P2" /> concepts,
+  <PriorityBadge level="P4" /> schema reference.
+- **Belongs here** — table purposes, relationships, when to query directly vs
+  use CRUD classes, and migration/compatibility notes.
+- **Does not belong here** — HPOS specifics (its own section), ORM-style
+  tutorials unrelated to WooCommerce.
+
+### HPOS (High-Performance Order Storage)
+
+- **Purpose** — how order storage works with HPOS: the tables, the
+  compatibility mode, the migration, and what changes for developers.
+- **Audience** — intermediate to advanced.
+- **Priority** — <PriorityBadge level="P1" />
+- **Belongs here** — the order data model under HPOS, how to write code that
+  works in both modes, and the sync/compatibility behavior.
+- **Does not belong here** — general order lifecycle (that is Orders), generic
+  database theory.
+
+### Customization
+
+- **Purpose** — cross-cutting "how to change X safely" patterns that span
+  multiple subsystems.
+- **Audience** — intermediate to advanced.
+- **Priority** — <PriorityBadge level="P1" />
+- **Belongs here** — template override strategy, when to build a plugin,
+  child-theme boundaries, Blocks customization patterns, and the safety-level
+  framework applied to real scenarios.
+- **Does not belong here** — subsystem-specific recipes (those live with the
+  subsystem).
+
+### Debugging
+
+- **Purpose** — how to diagnose unexpected WooCommerce behavior methodically.
+- **Audience** — all levels.
+- **Priority** — <PriorityBadge level="P1" />
+- **Belongs here** — logging, the status report, hook tracing, isolating
+  plugin conflicts, reading the calculation pipeline, and common failure
+  signatures with their causes.
+- **Does not belong here** — feature documentation; link back to the subsystem
+  being debugged.
+
+### Performance
+
+- **Purpose** — where WooCommerce spends time and how to reduce it.
+- **Audience** — advanced.
+- **Priority** — <PriorityBadge level="P2" />
+- **Belongs here** — object caching, autoloaded options, query cost, cart
+  fragment cost, extension overhead, and headless considerations.
+- **Does not belong here** — generic web performance advice unrelated to
+  WooCommerce.
+
+### Security
+
+- **Purpose** — the WooCommerce-specific security surface.
+- **Audience** — intermediate to advanced.
+- **Priority** — <PriorityBadge level="P2" />
+- **Belongs here** — nonces and capability checks in custom code, handling PII
+  in orders and customers, payment data boundaries, and safe AJAX/REST
+  patterns.
+- **Does not belong here** — general WordPress hardening (link out), server
+  configuration.
+
+### Limitations
+
+- **Purpose** — an honest catalog of what WooCommerce does not do well, and
+  when to choose another approach.
+- **Audience** — all levels; especially decision-makers.
+- **Priority** — <PriorityBadge level="P1" />
+- **Belongs here** — architectural constraints, the CMS-shaped data model,
+  scaling ceilings, and decision guides comparing WooCommerce to custom builds
+  and other platforms.
+- **Does not belong here** — feature wishlists framed as bugs.
+
+## How this maps to the current site
+
+Today, WooDoc ships **Introduction** (partly) and this **About WooDoc**
+section. Everything else in the tree above is planned. The
+[Roadmap](/docs/about/roadmap) sequences the build.
+
+## Related
+
+<Cards>
+  <Card
+    title="Project Definition"
+    href="/docs/about/project-definition"
+    description="Mission, audience, philosophy, and DX principles."
+  />
+  <Card
+    title="Documentation Design System"
+    href="/docs/about/design-system"
+    description="The page templates each section will be built from."
+  />
+</Cards>

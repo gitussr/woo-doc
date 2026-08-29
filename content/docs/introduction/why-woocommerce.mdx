@@ -1,0 +1,241 @@
+---
+title: Why WooCommerce?
+description: What problem WooCommerce solves, why WordPress alone is not an e-commerce platform, what WooCommerce adds, the trade-offs of choosing it, and when it is the wrong tool.
+---
+
+<PageMeta priority="P0" audience="Beginner → Advanced" />
+
+Before learning how WooCommerce works, it is worth being clear about **why it
+exists** and **why you would choose it**. This chapter is not a sales pitch.
+The goal is to establish the reason for WooCommerce before teaching its
+mechanics — and to be honest about where it fits and where it does not.
+
+## The short version
+
+WordPress is a content management system. It manages *pages of content* and
+the people who edit them. It has no concept of a product, a price, a cart, an
+order, a customer, tax, shipping, or a payment.
+
+**WooCommerce is the layer that adds all of that** — a commerce domain model,
+a checkout pipeline, an order lifecycle, and the extension points to change
+every part of it — while reusing WordPress's users, content, admin, hooks,
+REST API, and plugin ecosystem.
+
+## Why WordPress alone is not an e-commerce platform
+
+A WordPress install gives you:
+
+- **Posts and pages** — arbitrary content, stored in `wp_posts`.
+- **Users and roles** — accounts and capabilities.
+- **Options** — site-wide settings.
+- **Taxonomies** — categories and tags.
+- **Hooks and filters** — a way to change behavior without editing core.
+- **A REST API and a cron system.**
+
+None of that is commerce. To sell something you need concepts WordPress simply
+does not have:
+
+<LayerStack
+  layers={[
+    { name: 'A product model', note: 'price, stock, variations, tax class, shipping class, downloadable files' },
+    { name: 'A cart', note: 'a temporary, per-visitor collection of items with live totals' },
+    { name: 'Totals calculation', note: 'discounts, coupons, fees, tax, shipping — in a defined order' },
+    { name: 'A checkout pipeline', note: 'address capture, validation, payment method selection, order creation' },
+    { name: 'An order lifecycle', note: 'pending → processing → completed / failed / refunded, with side effects at each step' },
+    { name: 'Payment integration', note: 'gateways, redirects, webhooks/IPN, tokenization' },
+    { name: 'Customer records', note: 'billing/shipping addresses, order history, downloadable permissions' },
+    { name: 'Transactional email', note: 'order confirmations, admin notifications, status updates' },
+  ]}
+  caption="Everything WooCommerce has to add on top of WordPress before a store is possible."
+/>
+
+You could build this yourself as a custom plugin. WooCommerce is that plugin —
+mature, widely deployed, and with a large extension ecosystem.
+
+## What WooCommerce adds
+
+On top of WordPress, WooCommerce provides:
+
+| Area | What you get |
+| --- | --- |
+| **Data model** | Products (simple, variable, grouped, external), product variations, coupons, orders, order items, customers, refunds — each with CRUD classes and pluggable data stores. |
+| **Storefront** | Shop, product, cart, checkout, and account pages, rendered through classic PHP templates *or* WooCommerce Blocks. |
+| **Cart & session** | A per-visitor cart, session persistence for guests and logged-in users, and AJAX cart fragments. |
+| **Totals engine** | An ordered calculation of line totals, discounts, fees, tax, and shipping. |
+| **Checkout** | Address fields, validation, payment method selection, order creation, and the "thank you" / order-received flow. |
+| **Order engine** | Order statuses, status-transition hooks, stock reduction, and admin order management. |
+| **Payments & shipping** | Gateway and shipping-method abstractions with several built in, and a well-defined interface for adding more. |
+| **Tax** | Tax classes, rates, and rules, with configurable rounding and display. |
+| **Emails** | A templated transactional email system with per-email settings. |
+| **REST & Store API** | A REST API for products/orders/customers and a Store API for headless/block front-ends. |
+| **Admin** | Settings screens, product editor, order screens, reports, and a status/system report. |
+| **Extensibility** | Hundreds of actions and filters, template overrides, and plugin-oriented architecture. |
+
+<VerifyNote>exact set of built-in gateways/shipping methods and REST route list for 11.0.1</VerifyNote>
+
+## What WooCommerce provides out of the box
+
+Without any extensions, a default WooCommerce install can:
+
+- Sell physical, digital/downloadable, and simple "external/affiliate"
+  products, including products with variations.
+- Take payment via the gateways bundled or offered during setup
+  <VerifyNote>current bundled gateway list</VerifyNote>, plus offline methods
+  (bank transfer, cheque, cash on delivery).
+- Apply coupons, flat-rate and free shipping, and configurable tax.
+- Send transactional emails and manage orders through the admin.
+- Expose products and orders over a REST API.
+
+What it does **not** do out of the box includes subscriptions, bookings,
+memberships, multi-vendor marketplaces, advanced product configurators, deep
+ERP/accounting integration, and many region-specific tax or invoicing
+requirements. Those are extensions or custom development.
+
+## Why businesses choose WooCommerce
+
+<DecisionGuide>
+  <Choice when="the team already runs on WordPress">
+    Content, marketing, and store live in one system, one admin, one hosting
+    setup, one skill set.
+  </Choice>
+  <Choice when="content and commerce are tightly linked">
+    Editorial commerce, content-driven catalogs, and SEO-heavy stores benefit
+    from WordPress's publishing tooling.
+  </Choice>
+  <Choice when="budget favors ownership over per-transaction fees">
+    No platform revenue share; hosting and extensions are the main costs.
+  </Choice>
+  <Choice when="requirements are unusual">
+    The extension ecosystem plus full code access means most requirements can
+    be met without leaving the platform.
+  </Choice>
+</DecisionGuide>
+
+## Why developers choose WooCommerce
+
+- **It is open source and readable.** You can follow a request from URL to
+  template to hook to data store in actual source code.
+- **It reuses WordPress skills.** Hooks, filters, the plugin model, WP-CLI,
+  and the REST API all carry over.
+- **Extension points are first-class.** Most behavior can be changed with an
+  action or filter, without touching core or a template.
+- **The ecosystem is large.** Payment, shipping, tax, and marketing
+  integrations usually already exist.
+- **It scales down and up.** The same platform runs a hobby store and a
+  high-traffic catalog (with real infrastructure work at the top end).
+
+## The trade-offs
+
+Choosing WooCommerce is choosing a set of constraints:
+
+<SafetyLevel level="risky" title="What you take on with WooCommerce">
+  - **You own the stack.** Hosting, performance, security patching, backups,
+    and uptime are your responsibility, not a vendor's.
+  - **Plugin sprawl is a real risk.** Every extension is code running in your
+    request path; conflicts and performance regressions come with the model.
+  - **The data model is WordPress-shaped.** Products are a custom post type;
+    historically, orders were too. This is flexible but not what you would
+    design from scratch for high-volume transactional data. HPOS
+    (High-Performance Order Storage) addresses order storage specifically.
+  - **Performance requires deliberate work** at scale — object caching, a
+    tuned host, careful extension choices, and sometimes a headless front-end.
+  - **"Classic vs Blocks" is a live migration.** Cart and Checkout exist in
+    two implementations, and customization advice differs between them.
+</SafetyLevel>
+
+<ClassicVsBlocks
+  classic="Cart and Checkout render through PHP templates and expose many well-documented action hooks (e.g. around checkout fields and review order). Most existing tutorials target this path."
+  blocks="Cart and Checkout render as WooCommerce Blocks (React). Customization uses block settings, Slot/Fill, the Store API, and integration interfaces rather than PHP template hooks. Some classic hooks do not fire."
+/>
+
+<VerifyNote>which classic checkout hooks do / do not run under the Checkout Block in 11.0.1</VerifyNote>
+
+## Where WooCommerce fits compared with a custom application
+
+<LayerStack
+  layers={[
+    { name: 'Hosted SaaS platform', note: 'Fastest to launch, least control, per-transaction or subscription cost, hard limits at the edges.' },
+    { name: 'WooCommerce on WordPress', note: 'Full code access, large ecosystem, WordPress operational model, commerce domain already built.' },
+    { name: 'Framework + commerce library', note: 'A general web framework with a commerce package. More control over data model, more to build and maintain.' },
+    { name: 'Fully custom application', note: 'Total control over model, performance, and workflow. Highest build and maintenance cost; you build checkout, tax, payments, and admin yourself.' },
+  ]}
+  caption="WooCommerce sits between a hosted platform and a bespoke build: you get the commerce domain for free but operate the stack yourself."
+/>
+
+## When WooCommerce is a good choice
+
+<DecisionGuide>
+  <Choice when="you are already invested in WordPress">
+    The operational and skills overlap is decisive.
+  </Choice>
+  <Choice when="content and SEO are central to the business">
+    WordPress's publishing strength is a genuine advantage.
+  </Choice>
+  <Choice when="requirements map to existing extensions">
+    Standard retail, digital downloads, simple subscriptions, common shipping
+    and tax setups.
+  </Choice>
+  <Choice when="you want to own the code and the data">
+    No platform lock-in; full access to the database and the request lifecycle.
+  </Choice>
+  <Choice when="the catalog and order volume are moderate">
+    Comfortably within range for tuned single-site hosting.
+  </Choice>
+</DecisionGuide>
+
+## When WooCommerce may not be a good choice
+
+<DecisionGuide>
+  <Choice when="transaction volume is very high and write-heavy">
+    A purpose-built system on a relational schema you control may be a better
+    fit than a CMS-shaped model — evaluate carefully rather than assume.
+  </Choice>
+  <Choice when="the product is a complex configurator or quoting engine">
+    Deep custom logic, real-time pricing, or B2B quoting can outgrow the
+    product model and become most of your codebase anyway.
+  </Choice>
+  <Choice when="you need a multi-tenant marketplace at scale">
+    Possible with extensions, but the architecture fights you; a dedicated
+    marketplace stack may be cleaner.
+  </Choice>
+  <Choice when="commerce is a small feature of a larger custom app">
+    If the app is a Laravel / Node / Rails product and checkout is one screen,
+    embedding a payment provider directly is often simpler than adding
+    WordPress.
+  </Choice>
+  <Choice when="the team has no WordPress operational capacity">
+    Someone has to own hosting, updates, and security. Without that, a hosted
+    platform lowers risk.
+  </Choice>
+</DecisionGuide>
+
+WooDoc will not pretend WooCommerce is always the answer. A recurring theme in
+later chapters is *"here is what this costs, here is where it strains, here is
+when to reach for something else."*
+
+## Key takeaways
+
+- WordPress manages content; **WooCommerce adds the entire commerce domain**
+  on top of it.
+- You choose WooCommerce for the **WordPress overlap, the ecosystem, and full
+  code ownership** — and you accept **operating the stack yourself**.
+- The **classic vs Blocks** split is the most important current caveat for
+  developers customizing the storefront.
+- It is an excellent fit for content-led, moderate-volume retail and a poor
+  fit for very high-volume transactional systems or apps where commerce is a
+  minor feature.
+
+## Related
+
+<Cards>
+  <Card
+    title="Developer Mental Model"
+    href="/docs/introduction/developer-mental-model"
+    description="How to think when you build on WooCommerce instead of a blog."
+  />
+  <Card
+    title="Where Does This Come From?"
+    href="/docs/introduction/where-does-this-come-from"
+    description="Tracing any element back to the layer that produced it."
+  />
+</Cards>

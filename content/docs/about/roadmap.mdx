@@ -1,0 +1,137 @@
+---
+title: Roadmap
+description: How WooDoc grows from this Step 1 foundation — a staged plan for subsequent documentation phases. The later phases are not built yet.
+---
+
+<PageMeta priority="P1" audience="Contributors & stakeholders" status="Plan · phases beyond Step 1 not started" />
+
+WooDoc is built incrementally. The full project is expected to take on the
+order of **10–15 working days or more**, developed in phases. This page
+sequences them. **Content quality outranks content quantity** at every phase.
+
+## What Step 1 delivered
+
+<Lifecycle
+  steps={[
+    'Project definition — mission, audience, problem, philosophy, DX principles',
+    'Information architecture — the full section map with purpose / audience / priority',
+    'Start Here — the first documentation experience',
+    'Why WooCommerce? — the first conceptual chapter',
+    'Developer Mental Model — the introductory version',
+    'Where Does This Come From? — the signature pattern',
+    'Documentation design system — page templates + content components',
+    'The platform shell — navigation, search, theming, WooDoc visual identity',
+  ]}
+  caption="Step 1 = foundation. No hook catalogs, no exhaustive references, no premature diagrams."
+/>
+
+## Guiding rules for every later phase
+
+<SafetyLevel level="recommended" title="Keep doing this">
+  - Write the plain explanation first, the precise terminology second.
+  - Trace every topic to the layer that owns it.
+  - Label every customization with a safety level.
+  - Note version-specific and classic-vs-Blocks differences explicitly.
+  - Tag every unverified concrete claim with <VerifyNote /> until checked.
+</SafetyLevel>
+
+<SafetyLevel level="dangerous" title="Do not">
+  - Generate hundreds of pages for coverage's sake.
+  - Invent hooks, template paths, classes, or behavior.
+  - Add diagrams that do not answer a specific developer question.
+  - Treat the information architecture as frozen.
+</SafetyLevel>
+
+## Phased plan
+
+### Phase 2 — Foundations
+
+- WordPress fundamentals as they relate to WooCommerce (request lifecycle,
+  post types, meta, options, hooks, cron, REST).
+- WooCommerce architecture: bootstrap, the `WC()` singleton, data stores and
+  CRUD classes, sessions.
+- WooCommerce data model overview.
+- The extension model: hooks vs filters vs templates vs blocks, and how they
+  compose.
+- **Accuracy pass:** resolve the Step 1 <VerifyNote /> tags in the pages that
+  already exist.
+
+### Phase 3 — Development toolkit
+
+- Hooks and filters: how to find them, priority, parameters, debugging which
+  ones fire.
+- Templates: the override mechanism, template parts, variables in scope.
+- Blocks: settings, Slot/Fill, the Store API, integration interfaces.
+- Shortcodes, AJAX (`admin-ajax` + nonces), REST API, and front-end
+  JavaScript (including cart fragments).
+- First real **Architecture** and **Hook** pages using the design-system
+  templates.
+
+### Phase 4 — The commerce lifecycle
+
+- Products: types, variations, data model, pricing, stock.
+- Cart: session, the totals calculation pipeline, fragments.
+- Checkout: fields, validation, order creation — classic and Blocks.
+- Orders: statuses, transitions, items, refunds.
+- Payments: gateway interface, redirects, webhooks/IPN, tokenization.
+- Shipping and taxes: methods, zones, rates, calculation order.
+- Emails: the transactional email system and its templates.
+- Each subsystem gets the full "where does this come from?" treatment.
+
+### Phase 5 — Data and storage
+
+- Database: WordPress tables WooCommerce uses, custom tables, meta patterns,
+  query cost.
+- HPOS: the order tables, compatibility mode, migration, writing dual-mode
+  code.
+- Full schema **Reference** pages (<PriorityBadge level="P4" />).
+
+### Phase 6 — Customization, debugging, operations
+
+- Customization patterns: template strategy, plugin vs mu-plugin vs child
+  theme, Blocks customization, applied safety-level scenarios.
+- Debugging: logging, the status report, hook tracing, plugin-conflict
+  isolation, reading the calculation pipeline, common failure signatures.
+- Performance: object caching, autoloaded options, query and fragment cost,
+  extension overhead, headless considerations.
+- Security: nonces and capability checks in custom code, PII in orders,
+  payment-data boundaries, safe AJAX/REST.
+
+### Phase 7 — Honesty and depth
+
+- Limitations: architectural constraints, the CMS-shaped model, scaling
+  ceilings, and decision guides (WooCommerce vs custom vs other platforms).
+- Advanced engineering topics driven by real developer questions.
+- Diagram pass: replace remaining simplified diagrams with accurate ones.
+
+### Ongoing — Search and discoverability
+
+Search is a **core feature**, not a later enhancement. As content grows,
+the index expands to cover concepts, hooks, filters, templates, functions,
+classes, settings, product fields, admin pages, database tables, APIs, AJAX
+actions, errors, troubleshooting, and guides. Frontmatter and page structure
+are written with the index in mind from the start.
+
+## Sequencing notes
+
+- Phases are ordered by dependency, not by perceived importance. Foundations
+  before toolkit before lifecycle.
+- Each phase ends with an **accuracy pass** that clears <VerifyNote /> tags
+  introduced during it.
+- The information architecture is revisited at the end of each phase and
+  adjusted.
+
+## Related
+
+<Cards>
+  <Card
+    title="Information Architecture"
+    href="/docs/about/information-architecture"
+    description="The section map these phases fill in."
+  />
+  <Card
+    title="Documentation Design System"
+    href="/docs/about/design-system"
+    description="The templates each phase's pages are built from."
+  />
+</Cards>

@@ -1,0 +1,284 @@
+---
+title: Documentation Design System
+description: The reusable page templates and content components every WooDoc page is built from — so future documentation stays consistent, scannable, and fast to write.
+---
+
+<PageMeta priority="P0" audience="Contributors" />
+
+WooDoc scales by **composition, not prose**. Every page is assembled from a
+small set of page templates and content components. This page is the reference
+for both, and it doubles as a live component gallery.
+
+## Writing model
+
+Whenever a topic is technical, structure it around these sections — use them
+intelligently, not mechanically. Not every page needs every one.
+
+| Section | Answers |
+| --- | --- |
+| **What?** | Simple explanation first. |
+| **Why?** | Why WooCommerce has this mechanism. |
+| **Where?** | The file, template, hook, filter, function, class, table, setting, JS component, or endpoint. |
+| **When?** | When a developer should use it. |
+| **When NOT?** | Inappropriate use cases. |
+| **How?** | A minimal, correct, copyable implementation. |
+| **Internally** | What WooCommerce does behind the scenes. |
+| **Gotchas** | Common mistakes. |
+| **Safer alternative** | A better extension point, if one exists. |
+| **Related** | The next relevant concept. |
+
+Preferred flow when in doubt:
+
+> **Concept → Location → Decision → Implementation → Warning → Example → Related**
+
+## Page templates
+
+Each template below lists its purpose, when to use it, and its expected
+skeleton. Contributors copy the skeleton and fill it in.
+
+### Concept page
+
+- **Purpose** — explain an idea or mechanism (e.g. "the cart session",
+  "template overrides").
+- **Use when** — the reader needs understanding before they can act.
+- **Skeleton** — `PageMeta` → What → Why → Where (LayerStack) → Mental model →
+  Gotchas → Related.
+
+### How-to guide
+
+- **Purpose** — accomplish one concrete task.
+- **Use when** — there is a single, well-defined goal with a recommended path.
+- **Skeleton** — `PageMeta` → Goal → Prerequisites → `Steps` → Result →
+  `SafetyLevel` (where the code belongs) → Gotchas → Related.
+
+### Reference page
+
+- **Purpose** — look up exact details (a hook signature, a template path list,
+  a settings key).
+- **Use when** — completeness and accuracy matter more than narrative.
+- **Skeleton** — `PageMeta` (usually <PriorityBadge level="P4" />) → one-line
+  summary → reference table(s) → `VersionNote` → minimal example → Related.
+
+### Troubleshooting page
+
+- **Purpose** — diagnose a class of unexpected behavior.
+- **Use when** — readers arrive with a symptom, not a topic.
+- **Skeleton** — `PageMeta` → Symptom → Likely causes (ordered by frequency) →
+  How to confirm each → Fix per cause → How to prevent → Related.
+
+### Architecture page
+
+- **Purpose** — show how a subsystem is built and how data moves through it.
+- **Use when** — the shape of the system is the point.
+- **Skeleton** — `PageMeta` → One-paragraph overview → `LayerStack` or
+  `Lifecycle` diagram → component-by-component walkthrough → extension surface
+  → Related.
+
+### Hook page
+
+- **Purpose** — document one action or filter.
+- **Use when** — a hook is important enough to warrant its own entry.
+- **Skeleton** — `PageMeta` → signature (name, type, parameters, default
+  priority) → What fires it / where → When to use → When not → minimal example
+  → `SafetyLevel` → `ClassicVsBlocks` (does it fire in both?) → `VersionNote` →
+  Related.
+
+### Template page
+
+- **Purpose** — document one classic template file.
+- **Use when** — developers commonly override or hook into it.
+- **Skeleton** — `PageMeta` → path → what renders it → variables in scope →
+  hooks fired inside → override procedure (`SafetyLevel` risky) → Blocks
+  equivalent → Related.
+
+### Database page
+
+- **Purpose** — document a table or a storage pattern.
+- **Use when** — direct data access or migration is in play.
+- **Skeleton** — `PageMeta` → table purpose → columns → relationships →
+  when to query directly vs use CRUD → HPOS note → `VersionNote` → Related.
+
+### API page
+
+- **Purpose** — document a REST or Store API resource.
+- **Use when** — headless, integrations, or automation.
+- **Skeleton** — `PageMeta` → endpoint(s) → auth → request/response shape →
+  example → rate/permission notes → Related.
+
+### Decision guide
+
+- **Purpose** — help choose between approaches (extension vs custom, classic
+  vs Blocks, WooCommerce vs another stack).
+- **Use when** — the answer is "it depends" and the dependencies are
+  nameable.
+- **Skeleton** — `PageMeta` → the decision in one sentence → `DecisionGuide`
+  with `Choice` rows → trade-off summary → Related.
+
+---
+
+## Component gallery
+
+Everything below is available in every `.mdx` file with **no import**.
+
+### `PageMeta`
+
+Top-of-page classification strip. Put it directly under the frontmatter.
+
+```mdx
+<PageMeta priority="P1" audience="Intermediate" />
+```
+
+<PageMeta priority="P1" audience="Intermediate" status="Example" versions="WooCommerce 11.0.1" updated="2026-08-29" />
+
+### `PriorityBadge`
+
+```mdx
+<PriorityBadge level="P0" /> <PriorityBadge level="P2" /> <PriorityBadge level="P4" />
+```
+
+<PriorityBadge level="P0" /> &nbsp; <PriorityBadge level="P2" /> &nbsp; <PriorityBadge level="P4" />
+
+### `SafetyLevel`
+
+The spine of the "extension points, not hacks" principle. Three levels,
+same colors everywhere.
+
+```mdx
+<SafetyLevel level="recommended">Use the `woocommerce_...` filter from a plugin.</SafetyLevel>
+<SafetyLevel level="risky">Override the template in your theme — you maintain the copy.</SafetyLevel>
+<SafetyLevel level="dangerous">Editing core files. Do not.</SafetyLevel>
+```
+
+<SafetyLevel level="recommended">Use the sanctioned filter from a plugin or `mu-plugin`. Survives updates.</SafetyLevel>
+<SafetyLevel level="risky">Override the template by copying it into your theme. Acceptable, but you now own that copy against every WooCommerce update.</SafetyLevel>
+<SafetyLevel level="dangerous">Editing a file inside the WooCommerce plugin directory, or depending on an undocumented internal. Breaks on update.</SafetyLevel>
+
+### `WhereFrom`
+
+The signature panel for tracing an element to its source.
+
+```mdx
+<WhereFrom
+  looking={<>The <strong>cart subtotal</strong> line.</>}
+  origin={<>A classic template partial, populated from the cart totals object.</>}
+  controls={<>The totals calculation stage and the filters on individual total values.</>}
+  safe={<>Filter the formatted amount; add rows via the surrounding action hook.</>}
+  avoid={<>Editing the template in the plugin directory; changing display without changing the calculated value.</>}
+/>
+```
+
+<WhereFrom
+  looking={<>The <strong>cart subtotal</strong> line on the cart page.</>}
+  origin={<>A classic template partial, populated from the cart totals object. <VerifyNote>partial path for 11.0.1</VerifyNote></>}
+  controls={<>The totals calculation stage and the filters applied to individual total values before display.</>}
+  safe={<>Filter the formatted amount; add rows via the surrounding action hook; both from a plugin.</>}
+  avoid={<>Editing the template inside the WooCommerce plugin directory; changing the displayed value without changing the calculated one.</>}
+/>
+
+### `VersionNote` and `VerifyNote`
+
+```mdx
+<VersionNote version="WooCommerce 11.0.1">Behavior described here matches this release.</VersionNote>
+
+The order table is `wc_orders` <VerifyNote>confirm table name under HPOS in 11.0.1</VerifyNote>.
+```
+
+<VersionNote version="WooCommerce 11.0.1">Behavior described on this page matches this release; earlier versions differ.</VersionNote>
+
+Inline, `VerifyNote` marks a concrete claim awaiting a source check <VerifyNote>example marker</VerifyNote>.
+
+### `ClassicVsBlocks`
+
+```mdx
+<ClassicVsBlocks
+  classic="Fires the woocommerce_review_order_before_payment action."
+  blocks="Uses the checkout block's payment integration interface; the classic action does not fire."
+/>
+```
+
+<ClassicVsBlocks
+  classic="Renders through PHP templates and fires the classic checkout action hooks. Most existing tutorials target this path."
+  blocks="Renders as React blocks; customization uses block settings, Slot/Fill, and the Store API. Some classic hooks do not fire."
+/>
+
+### `Lifecycle`
+
+Ordered flow. `direction` is `vertical` (default) or `horizontal`.
+
+```mdx
+<Lifecycle steps={['Cart', 'Checkout', 'Order', 'Payment', 'Fulfilment']} direction="horizontal" />
+```
+
+<Lifecycle steps={['Cart', 'Checkout', 'Order', 'Payment', 'Fulfilment']} direction="horizontal" caption="High-level WooCommerce lifecycle." />
+
+### `LayerStack`
+
+Which layers own a thing.
+
+```mdx
+<LayerStack
+  layers={[
+    { name: 'Template', note: 'markup and layout' },
+    { name: 'Hook', note: 'injection points' },
+    { name: 'Filter', note: 'value transformation' },
+  ]}
+/>
+```
+
+<LayerStack
+  layers={[
+    { name: 'Template', note: 'markup and layout — overridable in a theme' },
+    { name: 'Hook (action)', note: 'positions where markup is injected' },
+    { name: 'Filter', note: 'transforms a value before it is used or shown' },
+  ]}
+/>
+
+### `DecisionGuide` and `Choice`
+
+```mdx
+<DecisionGuide>
+  <Choice when="a hook exists for exactly this">Use it from a plugin.</Choice>
+  <Choice when="no hook reaches it">Override the template; record the maintenance cost.</Choice>
+</DecisionGuide>
+```
+
+<DecisionGuide>
+  <Choice when="a hook or filter exists for exactly this">Use it from a plugin or `mu-plugin`. First choice.</Choice>
+  <Choice when="no hook reaches it but a template does">Override the template in your theme and track it against updates.</Choice>
+  <Choice when="only a core edit would work">Stop. Find another approach or reconsider the requirement.</Choice>
+</DecisionGuide>
+
+## Built-in components
+
+WooDoc also uses the standard Fumadocs components: `Callout`, `Cards` /
+`Card`, `Tabs`, `Steps`, and `Accordion`.
+
+<Callout type="warn">
+  Use `Callout` for short asides. Use `SafetyLevel` whenever the aside is
+  specifically about *where a customization belongs* — that keeps the
+  safety-level colors meaningful.
+</Callout>
+
+## Code example rules
+
+- Minimal, correct, contextual, copyable, explainable.
+- Never dump a large block without explanation.
+- Always label the context: **theme**, **plugin**, **mu-plugin**,
+  **functions.php**, **JavaScript**, **CSS**, or **template override**.
+- Prefer the **Before → Problem → Recommended implementation → Result** shape.
+- Never encourage editing WooCommerce core files.
+
+## Related
+
+<Cards>
+  <Card
+    title="Information Architecture"
+    href="/docs/about/information-architecture"
+    description="Where each page template gets used."
+  />
+  <Card
+    title="Where Does This Come From?"
+    href="/docs/introduction/where-does-this-come-from"
+    description="The pattern the WhereFrom component encodes."
+  />
+</Cards>

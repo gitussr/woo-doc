@@ -1,0 +1,143 @@
+---
+title: Start Here
+description: WooDoc is a developer-first WooCommerce engineering reference. This page explains what it is, who it is for, the problem it solves, and where to begin.
+---
+
+<PageMeta priority="P0" audience="Beginner → Advanced WordPress developers" />
+
+WooCommerce can feel like a black box. A button appears on a page and you
+cannot tell whether it came from a PHP template, a hook, a block, a shortcode,
+a script, or an AJAX response. You want to change one number and you are not
+sure what else moves when you do.
+
+**WooDoc exists to remove that fog.** It is a reference for developers who
+already know WordPress and now need to understand WooCommerce deeply enough to
+build, customize, extend, and debug it with confidence.
+
+## What WooDoc is
+
+A developer-first WooCommerce **engineering reference** — not a "how to run
+your store" tutorial and not a marketing site.
+
+Its job is to connect the pieces that WooCommerce functionality is spread
+across:
+
+<LayerStack
+  layers={[
+    { name: 'WordPress core', note: 'posts, users, options, hooks, the REST API, cron' },
+    { name: 'WooCommerce core', note: 'data stores, CRUD classes, the cart, sessions, the order engine' },
+    { name: 'Templates & Blocks', note: 'classic PHP templates and template parts, plus Cart/Checkout Blocks' },
+    { name: 'Hooks & filters', note: 'actions and filters that let you change behavior without editing core' },
+    { name: 'PHP & JavaScript', note: 'server-side logic and front-end behavior, including fragments' },
+    { name: 'AJAX & REST', note: 'admin-ajax endpoints and the WooCommerce REST API / Store API' },
+    { name: 'Database', note: 'custom tables, post meta, and HPOS order storage' },
+    { name: 'Extensions & themes', note: 'third-party plugins and theme overrides that change all of the above' },
+  ]}
+  caption="WooCommerce behavior is the sum of these layers. WooDoc tells you which layer you are actually looking at."
+/>
+
+## Who it is for
+
+WooDoc is written for **WordPress developers moving into WooCommerce**.
+
+- **Beginner WooCommerce developer** — comfortable with HTML, CSS, PHP,
+  WordPress themes and plugins, but disoriented once WooCommerce is involved.
+- **Intermediate WordPress developer** — can build WordPress sites, but
+  struggles with templates, hooks, the cart, checkout, product data, AJAX,
+  orders, payments, shipping, the database, HPOS, and Blocks.
+- **Advanced developer** — wants architecture, extension points, internal
+  data flow, debugging strategy, performance considerations, and an honest
+  account of WooCommerce's limits.
+
+Every page uses **progressive complexity**: the plain-language explanation
+first, the precise developer terminology second.
+
+## What problem it solves
+
+WooCommerce functionality is distributed. The same visible element can be
+influenced by WordPress, WooCommerce core, a template, a hook, a filter, PHP,
+JavaScript, AJAX, a REST endpoint, a block, a database value, an extension, or
+a theme customization.
+
+Most documentation and blog posts hand you a snippet to paste. That teaches
+you *what to type* but not *why it works*, *where else you could have done it*,
+or *what you just put at risk*. WooDoc connects those pieces so you can make
+the decision yourself.
+
+## What you will learn
+
+From WooCommerce fundamentals through to safely modifying complex WooCommerce
+functionality. The documentation is designed to take you along this path:
+
+<Lifecycle
+  steps={[
+    'WordPress fundamentals (as they relate to WooCommerce)',
+    'WooCommerce fundamentals',
+    'WooCommerce architecture',
+    'Development: hooks, filters, templates, blocks, AJAX, REST',
+    'Customization patterns and safe extension points',
+    'Debugging unexpected behavior',
+    'Advanced engineering, performance, and limitations',
+  ]}
+  caption="The intended learning progression. Later steps of WooDoc fill in each stage in depth."
+/>
+
+## How WooDoc thinks
+
+Two principles run through every page:
+
+<SafetyLevel level="recommended" title="Teach extension points, not hacks">
+  WooDoc distinguishes **recommended extension** (official hooks, filters,
+  APIs, supported template mechanisms) from **risky customization** (template
+  overrides, replacing behavior) and **dangerous customization** (editing core
+  files, relying on fragile internals). *Just because you can change it there
+  does not mean you should.*
+</SafetyLevel>
+
+<SafetyLevel level="risky" title="Be technically honest about limits">
+  WooCommerce cannot do everything well. WooDoc explains what it does out of
+  the box, what needs customization, what needs an extension, what needs
+  external infrastructure, and when a different stack (custom PHP, Laravel,
+  a Node service, a dedicated platform) is the better engineering choice.
+</SafetyLevel>
+
+## Version context
+
+<VersionNote version="WordPress 7.1 · WooCommerce 11.0.1">
+  WooDoc currently documents against these versions. Version-specific behavior
+  is called out explicitly, and differences between **classic templates** and
+  **WooCommerce Blocks** are noted where they matter.
+</VersionNote>
+
+## This is Step 1
+
+WooDoc is being built incrementally. This first release establishes the
+foundation: the project definition, the information architecture, the content
+design system, and the first conceptual chapters. It deliberately does **not**
+try to document every hook, template, setting, or database table yet — that is
+what later phases are for. See the [Roadmap](/docs/about/roadmap).
+
+## Where to go next
+
+<Cards>
+  <Card
+    title="Why WooCommerce?"
+    href="/docs/introduction/why-woocommerce"
+    description="What it solves, what it adds to WordPress, the trade-offs, and when it is the wrong tool."
+  />
+  <Card
+    title="Developer Mental Model"
+    href="/docs/introduction/developer-mental-model"
+    description="Why building a store is not building a brochure site."
+  />
+  <Card
+    title="Where Does This Come From?"
+    href="/docs/introduction/where-does-this-come-from"
+    description="WooDoc's signature pattern for tracing any WooCommerce element to its source."
+  />
+  <Card
+    title="Information Architecture"
+    href="/docs/about/information-architecture"
+    description="The full documentation map and how it is prioritized."
+  />
+</Cards>
