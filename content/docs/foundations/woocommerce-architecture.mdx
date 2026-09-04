@@ -21,15 +21,15 @@ From there it follows a defined sequence:
 
 <Lifecycle
   steps={[
-    'Main plugin file runs — defines constants, requires the core class',
-    'The main WooCommerce class is instantiated as a singleton',
-    'Includes are loaded: functions, abstract classes, data stores, integrations',
-    'Hooks are registered — including WooCommerce\'s own lifecycle actions',
-    'On plugins_loaded: WooCommerce signals it is loaded',
-    'On init: post types, taxonomies, the session, shortcodes, Store API routes register',
+    'woocommerce.php runs during plugin load — defines constants, calls WC()',
+    'WC() → WooCommerce::instance() constructs the singleton: define_constants(), define_tables(), includes(), init_hooks()',
+    'init_hooks() registers callbacks, including add_action( \'init\', [ $this, \'init\' ], 0 )',
+    'On plugins_loaded (priority -1): on_plugins_loaded() fires the woocommerce_loaded action',
+    'On WordPress init (priority 0): WooCommerce::init() runs — fires before_woocommerce_init, loads text domain, builds factories, registers post types / taxonomies / session / cart, then fires woocommerce_init',
+    'On rest_api_init: REST and Store API routes register',
     'The request proceeds as a normal WordPress request, now WooCommerce-aware',
   ]}
-  caption="WooCommerce bootstrap. Your integration code normally waits until at least the init step."
+  caption="WooCommerce bootstrap. Your integration code normally waits until at least before_woocommerce_init (for feature flags) or woocommerce_init (for everything else)."
 />
 
 WooCommerce fires its own actions during this sequence so extensions can hook
@@ -37,18 +37,28 @@ the right moment:
 
 | Hook | Fires | Use it for |
 | --- | --- | --- |
-| `before_woocommerce_init` | Very early, before WooCommerce initializes | Declaring compatibility (e.g. HPOS, Blocks) |
-| `woocommerce_loaded` | After WooCommerce's includes are loaded | Code that needs WooCommerce classes to exist |
-| `woocommerce_init` | WooCommerce has finished initializing | Most integration setup |
-| `init` (WordPress) | After WooCommerce registers its post types | Anything that depends on the `product` post type or taxonomies |
-
-<VerifyNote>exact names, order, and firing conditions of WooCommerce's bootstrap actions (`before_woocommerce_init`, `woocommerce_loaded`, `woocommerce_init`) in 11.0.1</VerifyNote>
+| `woocommerce_loaded` | On WordPress `plugins_loaded`, priority `-1` — after every plugin is loaded, before WordPress `init` | Code that needs WooCommerce's classes/functions to exist but must run before `init` |
+| `before_woocommerce_init` | At the start of `WooCommerce::init()` (on WordPress `init`, priority 0) | Declaring feature compatibility — HPOS, Cart/Checkout Blocks |
+| `woocommerce_init` | At the end of `WooCommerce::init()`, same tick | Most integration setup — factories, post types, and the session now exist |
+| `init` (WordPress, priority > 0) | After `WooCommerce::init()` has run | Anything depending on the `product` post type or WooCommerce taxonomies |
 
 <SafetyLevel level="recommended">
-  Declare feature compatibility (HPOS, Cart/Checkout Blocks) from a callback on
-  <code>before_woocommerce_init</code> using WooCommerce's feature-compatibility
-  API. Doing it later has no effect. <VerifyNote>the
-  <code>FeaturesUtil::declare_compatibility()</code> call shape for 11.0.1</VerifyNote>
+  Declare feature compatibility from a callback on
+  <code>before_woocommerce_init</code>:
+
+  ```php
+  // Main plugin file. Runs during WordPress init.
+  add_action( 'before_woocommerce_init', function () {
+    if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
+      \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', __FILE__, true );
+      \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'cart_checkout_blocks', __FILE__, true );
+    }
+  } );
+  ```
+
+  The feature slugs are <code>custom_order_tables</code> (HPOS) and
+  <code>cart_checkout_blocks</code>. Declaring later has no effect — the plugin
+  shows as "incompatible" and blocks the merchant from enabling the feature.
 </SafetyLevel>
 
 ## The `WC()` singleton
@@ -56,27 +66,26 @@ the right moment:
 `WC()` is a global accessor that returns the one WooCommerce instance. It is
 the entry point to the main runtime objects:
 
-<LayerStack
-  layers={[
-    { name: 'WC()->cart', note: 'the current visitor\'s cart — items, totals, coupons. Populated on the front end, not in admin/REST by default.' },
-    { name: 'WC()->session', note: 'the session handler — per-visitor key/value store backing the cart and checkout' },
-    { name: 'WC()->customer', note: 'the current customer object — billing/shipping address, tax location, logged-in or guest' },
-    { name: 'WC()->checkout()', note: 'the checkout controller — field definitions, validation, order creation' },
-    { name: 'WC()->query', note: 'front-end query manipulation for shop/product pages' },
-    { name: 'WC()->mailer()', note: 'the transactional email system' },
-    { name: 'WC()->payment_gateways()', note: 'the registry of available payment gateways' },
-    { name: 'WC()->shipping()', note: 'the shipping method / zone registry and package calculation' },
-  ]}
-  caption="The objects hanging off WC(). Most 'where does this behavior live?' questions start by identifying which of these owns it."
-/>
-
-<VerifyNote>the exact set of public properties and accessor methods on the `WooCommerce` class in 11.0.1, and which are only initialized on front-end requests</VerifyNote>
+| Accessor | Is | Notes |
+| --- | --- | --- |
+| `WC()->cart` (property) | `WC_Cart` | The visitor's cart. Loaded on the front end; `null` on admin / most REST / cron unless `wc_load_cart()` is called |
+| `WC()->session` (property) | `WC_Session_Handler` | Per-visitor key/value store backing the cart, coupons, chosen shipping |
+| `WC()->customer` (property) | `WC_Customer` | Current customer — address, tax location, logged-in or guest |
+| `WC()->query` (property) | `WC_Query` | Front-end query manipulation for shop / product pages |
+| `WC()->product_factory` / `WC()->order_factory` (property) | factories | Build `WC_Product` / `WC_Order` objects of the right subclass |
+| `WC()->countries` (property) | `WC_Countries` | Country / state lists, address formats, tax base location |
+| `WC()->checkout()` (method) | `WC_Checkout` | Checkout controller — field definitions, validation, order creation |
+| `WC()->mailer()` (method) | `WC_Emails` | The transactional email system |
+| `WC()->payment_gateways()` (method) | `WC_Payment_Gateways` | Registry of payment gateways |
+| `WC()->shipping()` (method) | `WC_Shipping` | Shipping method / zone registry and package calculation |
+| `WC()->queue()` (method) | Action Scheduler proxy | Schedule background jobs |
 
 <Callout type="warn">
   `WC()->cart` and `WC()->session` are **context-sensitive**. On admin, cron,
-  and many REST requests they may be `null` or empty because there is no
-  visitor session. Code that assumes a cart always exists breaks when it runs
-  in the wrong context.
+  and many REST requests they are `null` or empty because there is no visitor
+  session — `WooCommerce::init()` only calls `initialize_cart()` on front-end
+  requests. Code that assumes a cart always exists breaks when it runs in the
+  wrong context.
 </Callout>
 
 ## The data layer: CRUD classes and data stores
@@ -86,11 +95,11 @@ pattern that deliberately hides *where* the data physically lives:
 
 <LayerStack
   layers={[
-    { name: 'CRUD class', note: 'WC_Product, WC_Order, WC_Customer, WC_Coupon — an in-memory object with typed getters/setters and a save() method. This is the API you use.' },
-    { name: 'Data store', note: 'A swappable class that knows how to read/write that entity to its actual storage (post + meta, custom tables, HPOS). Selected at runtime; replaceable via a filter.' },
-    { name: 'Storage', note: 'wp_posts + wp_postmeta, lookup tables, or dedicated WooCommerce tables — an implementation detail the CRUD class shields you from.' },
+    { name: 'CRUD class', note: 'WC_Product (extends WC_Abstract_Legacy_Product → WC_Data), WC_Order (extends WC_Abstract_Order → WC_Data), WC_Customer, WC_Coupon — an in-memory object with typed getters/setters and a save() method. This is the API you use.' },
+    { name: 'Data store', note: 'WC_Data_Store::load( \'product\' | \'order\' | \'customer\' | \'coupon\' ) returns a store class — e.g. WC_Product_Data_Store_CPT, or for orders WC_Order_Data_Store_CPT (legacy) vs OrdersTableDataStore (HPOS). Swappable via the woocommerce_data_stores and woocommerce_<type>_data_store filters.' },
+    { name: 'Storage', note: 'wp_posts + wp_postmeta, the wc_product_meta_lookup table, or the dedicated wc_order* tables — an implementation detail the CRUD class shields you from.' },
   ]}
-  caption="Why $order->get_total() is the right call and $post->_order_total is not: the data store, not your code, decides where the value comes from."
+  caption="Why $order->get_total() is the right call and get_post_meta( $id, '_order_total' ) is not: the data store, not your code, decides where the value comes from."
 />
 
 The practical rules:
@@ -108,8 +117,6 @@ The practical rules:
   silently ignored, and reports/emails then disagree with the database.
 </SafetyLevel>
 
-<VerifyNote>the CRUD class list, their base classes (`WC_Data`, `WC_Abstract_Order`, …), and the `WC_Data_Store::load()` / `woocommerce_<type>_data_store` filter names for 11.0.1</VerifyNote>
-
 ## Sessions
 
 For anything that must persist across requests but is not a user account —
@@ -118,17 +125,21 @@ WooCommerce uses its own **session**, separate from PHP sessions.
 
 <Lifecycle
   steps={[
-    'First front-end action that needs a session (e.g. add to cart) creates one',
-    'A session cookie is set in the visitor\'s browser',
-    'Session data is written to a WooCommerce sessions table, keyed by that cookie',
+    'First front-end action that needs a session (e.g. add to cart) creates one via WC_Session_Handler',
+    'A cookie named wp_woocommerce_session_<COOKIEHASH> is set (name filterable via woocommerce_cookie)',
+    'Session data is written to the wp_woocommerce_sessions table, keyed by the customer/session ID in that cookie',
     'On later requests the cookie identifies the row; WC()->session loads it',
-    'For logged-in users the session is associated with the user ID',
-    'Expired sessions are cleaned up by a scheduled task',
+    'For logged-in users the session key is the user ID',
+    'Expired rows are purged on the woocommerce_cleanup_sessions daily cron event',
   ]}
   caption="The WooCommerce session lifecycle — the backbone of the cart for guests."
 />
 
-<VerifyNote>the session cookie name pattern, the sessions table name (`wp_woocommerce_sessions`?), and the cleanup schedule in 11.0.1</VerifyNote>
+<VersionNote version="WooCommerce 11.0.1">
+  11.0.1 moved guest session cookies to a stronger, salted hashing scheme
+  (with backward compatibility for existing cookies). The table name and the
+  `woocommerce_cleanup_sessions` schedule are unchanged.
+</VersionNote>
 
 <Callout type="info">
   Full-page caching and sessions interact badly if misconfigured: a cached
@@ -152,7 +163,12 @@ the same order-creation code. The split is at the edge, not the core — which
 is why "change the value in core logic, change the presentation per
 front-end" is the reliable customization strategy.
 
-<VerifyNote>which front-end WooCommerce ships as the default for new installs in 11.0.1 (Blocks vs classic for cart and checkout)</VerifyNote>
+<VersionNote version="WooCommerce 11.0.1">
+  Since WooCommerce 8.3 the **Cart, Checkout, and Order Confirmation Blocks are
+  the default** on new installs. Stores created before 8.3 keep the classic
+  shortcode pages until a merchant migrates them (WooCommerce → Status → Tools).
+  So a given store can be on either front-end — never assume.
+</VersionNote>
 
 ## Related
 

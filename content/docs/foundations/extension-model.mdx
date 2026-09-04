@@ -35,7 +35,16 @@ its return value is discarded.
 - **Cannot:** change a value WooCommerce already calculated. If the price is
   wrong, an action fired after pricing cannot fix it.
 
-<VerifyNote>representative core action names for storefront positions (e.g. around the add-to-cart button, checkout fields, order-received) in 11.0.1</VerifyNote>
+Representative core actions (all still present in 11.0.1):
+
+| Action | Position |
+| --- | --- |
+| `woocommerce_before_add_to_cart_form` / `woocommerce_after_add_to_cart_button` | Around the single-product add-to-cart form |
+| `woocommerce_single_product_summary` | The product summary column (priced callbacks at set priorities: title 5, price 10, add-to-cart 30) |
+| `woocommerce_checkout_before_customer_details` / `woocommerce_review_order_before_payment` | Classic checkout regions |
+| `woocommerce_checkout_create_order` | Just before a new order is saved — set order data here |
+| `woocommerce_thankyou` | The order-received page, with the order ID |
+| `woocommerce_order_status_changed` | Any order status transition |
 
 ## Filters — change *a value*
 
@@ -54,7 +63,16 @@ what you return.
   highest-safety one. It survives updates and touches nothing else.
 </SafetyLevel>
 
-<VerifyNote>representative core filter names for common value changes (catalog price, cart item price, checkout fields, gateway availability) in 11.0.1</VerifyNote>
+Representative core filters (all still present in 11.0.1):
+
+| Filter | Changes |
+| --- | --- |
+| `woocommerce_product_get_price` / `woocommerce_product_get_regular_price` / `woocommerce_product_get_sale_price` | The stored price a `WC_Product` returns |
+| `woocommerce_get_price_html` | The formatted price HTML shown in the catalog |
+| `woocommerce_cart_item_price` / `woocommerce_cart_item_subtotal` | The *displayed* per-line price in the cart (not the amount charged — that is set via `set_price()` on `woocommerce_before_calculate_totals`) |
+| `woocommerce_checkout_fields` | The classic checkout field definitions |
+| `woocommerce_available_payment_gateways` | Which gateways are offered at checkout |
+| `woocommerce_email_recipient_<id>` | The recipient of a given transactional email |
 
 ### Actions vs filters — the test
 
@@ -73,30 +91,33 @@ what you return.
 ## Template overrides — change *classic markup*
 
 WooCommerce renders classic storefront fragments from PHP files in its
-`templates/` directory, loaded through a resolver that checks your **theme**
-first. Copy a template to `your-theme/woocommerce/<same-path>` and your copy
-wins.
+`plugins/woocommerce/templates/` directory. Core loads them with
+`wc_get_template()` / `wc_get_template_part()`, which call `wc_locate_template()`
+to resolve the path — checking `yourtheme/woocommerce/<same-path>` first, then
+falling back to the plugin. Copy a template into that theme folder (minus the
+`templates/` segment) and your copy wins. The resolution can also be filtered
+via `woocommerce_locate_template` or `wc_get_template`.
 
 <Lifecycle
   steps={[
-    'WooCommerce calls its template loader for e.g. cart/cart-totals.php',
-    'The loader looks in your child theme, then parent theme, then WooCommerce',
+    'Core calls wc_get_template( \'cart/cart-totals.php\' )',
+    'wc_locate_template() checks child theme → parent theme → WooCommerce plugin',
     'First match wins — your themed copy is used if present',
-    'The template runs with a defined set of variables in scope',
+    'The template runs with a defined set of $args in scope',
     'Action hooks inside the template still fire — from your copy too, if you keep them',
   ]}
   caption="The classic template override mechanism. It is a theme feature, resolved at render time."
 />
 
 <SafetyLevel level="risky">
-  A template override is a **maintained fork of one file**. When WooCommerce
-  changes that template in an update, your copy does not get the change — and
-  can silently drop new markup, hooks, or accessibility fixes. WooCommerce's
-  system report flags overridden templates that are out of date. Use only when
-  no hook or filter reaches what you need.
+  A template override is a **maintained fork of one file**. Each core template
+  carries an <code>@version</code> docblock; WooCommerce → Status → System
+  Status lists every overridden template whose <code>@version</code> is behind
+  the current core template ("version X is out of date. The core version is
+  Y"). When WooCommerce changes that template, your copy does not get the
+  change and can silently drop new markup, hooks, or accessibility fixes. Use
+  only when no hook or filter reaches what you need.
 </SafetyLevel>
-
-<VerifyNote>the template resolver function names (`wc_get_template`, `wc_locate_template`?), the theme sub-directory (`woocommerce/`), and the outdated-template version-check mechanism for 11.0.1</VerifyNote>
 
 <Callout type="warn">
   Template overrides only affect the **classic** front-end. They do nothing to
@@ -112,19 +133,18 @@ not extended with PHP template hooks. Instead:
 
 <LayerStack
   layers={[
-    { name: 'Block settings', note: 'Editor-side options on each block — the no-code surface.' },
-    { name: 'Slot / Fill', note: 'Named regions in the checkout UI where an extension can render its own React components.' },
-    { name: 'Integration interface', note: 'A registration API for adding a block-aware integration: scripts, data, and server-side wiring for checkout.' },
-    { name: 'Store API extensibility', note: 'Attach custom data to cart/checkout responses and receive custom data back on order submission.' },
+    { name: 'Block settings', note: 'Editor-side attributes on each block — the no-code surface.' },
+    { name: 'Slot / Fill', note: 'React fills like ExperimentalOrderMeta, ExperimentalOrderShippingPackages, ExperimentalDiscountsMeta — rendered via registerPlugin() with scope "woocommerce-checkout"' },
+    { name: 'Checkout filters', note: 'registerCheckoutFilters() from @woocommerce/blocks-checkout — transform labels, item names, totals strings client-side' },
+    { name: 'IntegrationInterface (PHP)', note: 'register scripts/styles/data with the blocks via the woocommerce_blocks_checkout_block_registration / _cart_block_registration actions' },
+    { name: 'Store API extension (PHP)', note: 'ExtendSchema, via woocommerce_store_api_register_endpoint_data() to add namespaced data to cart/checkout responses and woocommerce_store_api_register_update_callback() to receive data back' },
   ]}
   caption="The Blocks extension surface. Conceptually parallel to hooks + templates, but implemented in JS + a data API."
 />
 
-<VerifyNote>the current Blocks extensibility API names — Slot/Fill region names, the checkout integration registration function, and the Store API extend mechanism (`ExtendSchema` / `woocommerce_store_api_register_endpoint_data`?) for 11.0.1</VerifyNote>
-
 <ClassicVsBlocks
   classic="Customize with actions, filters, and template overrides. Mature, heavily documented, most tutorials target it."
-  blocks="Customize with block settings, Slot/Fill, integration interfaces, and Store API data. Newer, JS-centric; some classic checkout actions do not fire here."
+  blocks="Customize with block settings, Slot/Fill, checkout filters, IntegrationInterface, and Store API data. Classic display and process hooks — woocommerce_checkout_fields, woocommerce_review_order_before_payment, woocommerce_checkout_order_processed and the like — do NOT run; the server-side equivalent is woocommerce_store_api_checkout_order_processed and friends."
 />
 
 ## How they compose
@@ -177,10 +197,10 @@ option to checkout:
 />
 
 <VersionNote version="WooCommerce 11.0.1">
-  Mechanism *concepts* here are stable. Every specific hook name, template
-  path, resolver function, and Blocks API on this page is tagged
-  <VerifyNote /> until checked against core source for this release — the
-  Phase 3 accuracy pass clears them.
+  The hook names, template functions, and Blocks APIs on this page were checked
+  against WooCommerce 11.0.1. The Blocks `Experimental*` Slot/Fill names are
+  still marked experimental by WooCommerce and may be renamed in a future
+  release — pin the WooCommerce Blocks version you build against.
 </VersionNote>
 
 ## Related

@@ -94,9 +94,11 @@ hook a stage that does not fire under the active cart/checkout implementation.
   looking={<>The <strong>"Add to cart" button</strong> on a single product page.</>}
   origin={
     <>
-      A classic template renders the single-product summary; an action hook
-      inside it outputs the add-to-cart form for the product type.
-      <VerifyNote>template path + hook name for 11.0.1</VerifyNote>
+      The <code>woocommerce_single_product_summary</code> action runs
+      <code>woocommerce_template_single_add_to_cart</code> at priority 30,
+      which loads <code>single-product/add-to-cart/&lt;type&gt;.php</code>
+      (<code>simple.php</code>, <code>variable.php</code>, …) via
+      <code>wc_get_template()</code>.
     </>
   }
   controls={

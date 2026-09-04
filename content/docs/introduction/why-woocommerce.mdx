@@ -64,14 +64,12 @@ On top of WordPress, WooCommerce provides:
 | **Totals engine** | An ordered calculation of line totals, discounts, fees, tax, and shipping. |
 | **Checkout** | Address fields, validation, payment method selection, order creation, and the "thank you" / order-received flow. |
 | **Order engine** | Order statuses, status-transition hooks, stock reduction, and admin order management. |
-| **Payments & shipping** | Gateway and shipping-method abstractions with several built in, and a well-defined interface for adding more. |
+| **Payments & shipping** | Built-in offline gateways (`bacs` direct bank transfer, `cheque`, `cod` cash on delivery) and shipping methods (`flat_rate`, `free_shipping`, `local_pickup`), plus a `WC_Payment_Gateway` / `WC_Shipping_Method` interface for adding more. |
 | **Tax** | Tax classes, rates, and rules, with configurable rounding and display. |
 | **Emails** | A templated transactional email system with per-email settings. |
-| **REST & Store API** | A REST API for products/orders/customers and a Store API for headless/block front-ends. |
+| **REST & Store API** | `wc/v3` REST API (`products`, `orders`, `customers`, `coupons`, `reports`, …) and the separate `wc/store/v1` Store API for headless / block front-ends. |
 | **Admin** | Settings screens, product editor, order screens, reports, and a status/system report. |
 | **Extensibility** | Hundreds of actions and filters, template overrides, and plugin-oriented architecture. |
-
-<VerifyNote>exact set of built-in gateways/shipping methods and REST route list for 11.0.1</VerifyNote>
 
 ## What WooCommerce provides out of the box
 
@@ -79,9 +77,10 @@ Without any extensions, a default WooCommerce install can:
 
 - Sell physical, digital/downloadable, and simple "external/affiliate"
   products, including products with variations.
-- Take payment via the gateways bundled or offered during setup
-  <VerifyNote>current bundled gateway list</VerifyNote>, plus offline methods
-  (bank transfer, cheque, cash on delivery).
+- Take payment via the three built-in offline methods (direct bank transfer,
+  cheque, cash on delivery). A live card gateway is a quick guided install
+  during onboarding (WooPayments / Stripe / PayPal), not bundled code —
+  PayPal Standard was removed from core for new installs in WooCommerce 5.5.
 - Apply coupons, flat-rate and free shipping, and configurable tax.
 - Send transactional emails and manage orders through the admin.
 - Expose products and orders over a REST API.
@@ -148,7 +147,20 @@ Choosing WooCommerce is choosing a set of constraints:
   blocks="Cart and Checkout render as WooCommerce Blocks (React). Customization uses block settings, Slot/Fill, the Store API, and integration interfaces rather than PHP template hooks. Some classic hooks do not fire."
 />
 
-<VerifyNote>which classic checkout hooks do / do not run under the Checkout Block in 11.0.1</VerifyNote>
+<VersionNote version="WooCommerce 11.0.1 · classic checkout hooks under the Checkout Block">
+  Display and checkout-processing hooks from the classic flow do **not** run
+  under the Checkout Block — including `woocommerce_checkout_fields`,
+  `woocommerce_before_checkout_form`,
+  `woocommerce_checkout_before_customer_details`,
+  `woocommerce_review_order_before_payment`, `woocommerce_checkout_create_order`,
+  and `woocommerce_checkout_order_processed`. The block path fires Store API
+  equivalents instead, such as
+  `woocommerce_store_api_checkout_update_order_from_request` and
+  `woocommerce_store_api_checkout_order_processed`. Order-object and
+  status-transition hooks — `woocommerce_new_order`,
+  `woocommerce_order_status_changed`, `woocommerce_thankyou` — still fire in
+  both.
+</VersionNote>
 
 ## Where WooCommerce fits compared with a custom application
 

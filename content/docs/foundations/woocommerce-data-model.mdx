@@ -15,20 +15,19 @@ this model workable.
 
 ## The entities at a glance
 
-<LayerStack
-  layers={[
-    { name: 'Product', note: 'WC_Product (+ subclasses). A sellable item. Custom post type product.' },
-    { name: 'Product variation', note: 'WC_Product_Variation. A specific combination of a variable product\'s attributes. Post type product_variation, child of a product.' },
-    { name: 'Order', note: 'WC_Order. A completed (or in-progress) purchase with a status and history. Classic: post type shop_order. HPOS: dedicated tables.' },
-    { name: 'Order item', note: 'WC_Order_Item_* (product, shipping, fee, coupon, tax). The line entries of an order. Always in dedicated tables.' },
-    { name: 'Refund', note: 'WC_Order_Refund. A negative order against a parent order.' },
-    { name: 'Customer', note: 'WC_Customer. A WordPress user with the customer role, or a guest identified only by session/order.' },
-    { name: 'Coupon', note: 'WC_Coupon. A discount rule. Custom post type shop_coupon.' },
-  ]}
-  caption="The core WooCommerce entities and the CRUD class that represents each."
-/>
+| Entity | CRUD class | Storage |
+| --- | --- | --- |
+| Product | `WC_Product` + `WC_Product_Simple` / `WC_Product_Variable` / `WC_Product_Grouped` / `WC_Product_External` | Post type `product` |
+| Product variation | `WC_Product_Variation` | Post type `product_variation`, child of a `product` |
+| Order | `WC_Order` (extends `WC_Abstract_Order`) | HPOS: `wc_order*` tables. Legacy: post type `shop_order` |
+| Order item | `WC_Order_Item_Product` / `_Shipping` / `_Fee` / `_Coupon` / `_Tax` (extend `WC_Order_Item`) | `woocommerce_order_items` + `woocommerce_order_itemmeta` |
+| Refund | `WC_Order_Refund` | Like an order; post type `shop_order_refund` in legacy mode |
+| Customer | `WC_Customer` | WP user with role `customer`, or a guest (session + order only) |
+| Coupon | `WC_Coupon` | Post type `shop_coupon` |
 
-<VerifyNote>the exact CRUD class names, subclass hierarchy, and post-type slugs for each entity in 11.0.1</VerifyNote>
+All the product and order classes ultimately extend `WC_Data`, the base class
+that provides the getter/setter/`save()` contract and delegates persistence to
+a data store.
 
 ## Products
 
@@ -38,18 +37,19 @@ meta plus taxonomy terms.
 <LayerStack
   layers={[
     { name: 'wp_posts (type product)', note: 'title, description (post_content), short description (post_excerpt), status, slug' },
-    { name: 'wp_postmeta', note: 'price, SKU, stock, weight, dimensions, tax class, and most other fields — as underscore-prefixed keys' },
-    { name: 'Product meta lookup table', note: 'a flattened copy of hot fields (price, stock status, rating) that catalog queries use instead of postmeta' },
-    { name: 'Taxonomies', note: 'product_cat, product_tag, and one taxonomy per global attribute (pa_color, pa_size, …)' },
-    { name: 'wp_posts (type product_variation)', note: 'one child post per variation of a variable product, each with its own price/stock meta' },
+    { name: 'wp_postmeta', note: 'fields as underscore-prefixed keys: _regular_price, _sale_price, _price, _sku, _stock, _stock_status, _weight, _length/_width/_height, _tax_class, _manage_stock, _downloadable, _virtual' },
+    { name: 'wc_product_meta_lookup', note: 'one row per product with real columns (sku, min_price, max_price, stock_status, stock_quantity, onsale, average_rating, total_sales, tax_class, …). Catalog queries and sorting hit this, not wp_postmeta.' },
+    { name: 'Taxonomies', note: 'product_cat, product_tag, product_type, product_visibility, and one pa_<attribute> taxonomy per global attribute' },
+    { name: 'wp_posts (type product_variation)', note: 'one child post per variation of a variable product, each with its own price/stock meta and an attribute_* meta key per attribute' },
   ]}
 />
 
-Product **types** are represented by CRUD subclasses selected from a taxonomy
-term (`product_type`): simple, variable, grouped, external/affiliate, plus
-whatever extensions add (subscription, bundle, …).
-
-<VerifyNote>the `product_type` taxonomy mechanism, the built-in type list, the core product meta keys, and the product meta lookup table name/columns for 11.0.1</VerifyNote>
+Product **types** are set by the `product_type` taxonomy term on the product
+(`public => false`, `hierarchical => false`). The built-in terms are
+**`simple`**, **`variable`**, **`grouped`**, and **`external`** (external /
+affiliate); each maps to a `WC_Product_*` subclass. Extensions register more
+(`subscription`, `bundle`, `composite`, …) by adding a term and filtering the
+class map (`woocommerce_product_class` / `woocommerce_product_type_query`).
 
 <SafetyLevel level="recommended">
   <code>$product = wc_get_product( $id );</code> then
@@ -66,32 +66,29 @@ been in dedicated tables.
 
 <LayerStack
   layers={[
-    { name: 'Order record', note: 'status, currency, customer ID, totals, dates, billing/shipping address. Classic: shop_order post + postmeta. HPOS: wc_orders + wc_order_addresses + wc_order_operational_data + wc_orders_meta.' },
-    { name: 'Order items table', note: 'one row per line — a product line, a shipping line, a fee, a coupon, a tax line. Each row has a type.' },
-    { name: 'Order item meta table', note: 'per-item detail: which product/variation, quantity, line subtotal/total, tax amounts, chosen variation attributes.' },
+    { name: 'Order record — HPOS', note: 'wp_wc_orders (status, currency, customer_id, totals, dates), wp_wc_order_addresses (billing + shipping rows), wp_wc_order_operational_data (internal flags/timestamps), wp_wc_orders_meta (extension data)' },
+    { name: 'Order record — legacy', note: 'a shop_order post in wp_posts, its fields in wp_postmeta. Same WC_Order API on top.' },
+    { name: 'wp_woocommerce_order_items', note: 'one row per line, with an order_item_type: line_item, fee, shipping, tax, coupon' },
+    { name: 'wp_woocommerce_order_itemmeta', note: 'per-item detail: _product_id / _variation_id, _qty, _line_subtotal / _line_total, _line_tax data, and one meta row per chosen variation attribute' },
   ]}
-  caption="Order storage. The item and item-meta tables are shared between classic and HPOS; only the order record itself moves."
+  caption="Order storage. The two item tables are unchanged by HPOS — only the order record itself moves between wp_posts and the wc_order* tables."
 />
-
-<VerifyNote>the HPOS table names (`wc_orders`, `wc_orders_meta`, `wc_order_addresses`, `wc_order_operational_data`?), the order items tables (`wp_woocommerce_order_items`, `wp_woocommerce_order_itemmeta`?), and the item `order_item_type` values for 11.0.1</VerifyNote>
 
 ### Classic vs HPOS storage
 
-<ClassicVsBlocks
-  classic="Order = a shop_order post in wp_posts; its fields are rows in wp_postmeta. Queryable with WP_Query and get_posts(). This was the default for years."
-  blocks="HPOS: order = rows in purpose-built wc_order* tables with real columns and indexes. Queried with wc_get_orders() / the orders data store. Much faster for large order volumes."
-/>
-
 <Callout type="warn">
-  A store can run in **HPOS mode**, **legacy posts mode**, or a
-  **compatibility (sync) mode** that writes both. Code that must work
-  everywhere reads and writes only through `wc_get_order()` / `WC_Order` and
-  queries only through `wc_get_orders()` — never `WP_Query` for orders, never
-  direct SQL against a hard-coded table. HPOS gets its own section in a later
-  phase.
+  HPOS ("High-Performance Order Storage") settings offer three states:
+  **"WordPress post tables"** (legacy), **"High-performance order storage"**,
+  and legacy **with "compatibility mode"** enabled, which syncs writes to both.
+  HPOS has been the default for **new** installs since WooCommerce 8.2;
+  pre-8.2 stores stay on post tables until migrated. Code that must work
+  everywhere reads and writes only through `wc_get_order()` / `WC_Order`,
+  queries only through `wc_get_orders()`, and never runs `WP_Query` or direct
+  SQL against a hard-coded order table. Internally,
+  `WC_Data_Store::load( 'order' )` returns `OrdersTableDataStore` or
+  `WC_Order_Data_Store_CPT` depending on which tables are authoritative. HPOS
+  gets its own section in a later phase.
 </Callout>
-
-<VerifyNote>the exact names of the three HPOS modes and the current default for new installs in 11.0.1</VerifyNote>
 
 ## Customers
 
@@ -99,27 +96,35 @@ been in dedicated tables.
 
 <DecisionGuide>
   <Choice when="the buyer has an account">
-    A WordPress user (role `customer`), plus WooCommerce meta for
-    billing/shipping address, and a lookup-table row for reporting. Order
-    history is every order with their user ID.
+    A WordPress user with role `customer` (capabilities: `read` plus
+    WooCommerce's own `read_private_shop_orders` etc. for their own data),
+    plus user meta for billing/shipping address, plus a row in
+    `wp_wc_customer_lookup` for Analytics. Order history is every order with
+    their `customer_id`.
   </Choice>
   <Choice when="the buyer checked out as a guest">
-    No user row. The customer exists only as the address data stored *on the
+    No user row. The customer exists only as the address copied *onto the
     order*, plus a transient `WC_Customer` built from the session during
-    checkout. Matched to future orders only by email, heuristically.
+    checkout. Analytics still gets a `wp_wc_customer_lookup` row, keyed by
+    email with `user_id = 0`, so guest orders are attributed.
   </Choice>
 </DecisionGuide>
 
-<VerifyNote>the customer lookup table name, the `customer` role capabilities, and how guest customers appear in Analytics for 11.0.1</VerifyNote>
+<VersionNote version="WooCommerce 11.0">
+  11.0 added **guest order claiming**: a logged-in customer can link past
+  guest-checkout orders (matched by email, with email verification) to their
+  account, after which those orders show in their order history.
+</VersionNote>
 
 ## Coupons
 
-A coupon is a `shop_coupon` post whose meta holds the rule: discount type
-(percentage, fixed cart, fixed product), amount, usage limits, product/
-category restrictions, expiry, minimum/maximum spend. `WC_Coupon` reads it;
-the cart totals pipeline applies it.
-
-<VerifyNote>the coupon meta keys and discount-type slugs for 11.0.1</VerifyNote>
+A coupon is a `shop_coupon` post whose meta holds the rule. The
+`discount_type` is one of `percent`, `fixed_cart`, or `fixed_product`; other
+meta keys include `coupon_amount`, `individual_use`, `usage_limit`,
+`usage_limit_per_user`, `limit_usage_to_x_items`, `date_expires`,
+`free_shipping`, `product_ids` / `exclude_product_ids`, `product_categories` /
+`exclude_product_categories`, `minimum_amount`, `maximum_amount`. `WC_Coupon`
+reads it; the cart totals pipeline applies it.
 
 ## How the entities relate
 

@@ -83,7 +83,15 @@ depend on that value:
   or the cart calculation stage — not the display template.
 </SafetyLevel>
 
-<VerifyNote>exact filter names for catalog price vs cart line price in 11.0.1</VerifyNote>
+<VersionNote version="WooCommerce 11.0.1">
+  Concretely: the catalog price a product reports is filtered by
+  `woocommerce_product_get_price` (and `_get_regular_price` /
+  `_get_sale_price`); the formatted catalog price HTML by
+  `woocommerce_get_price_html`. The amount a cart line is *charged* is set by
+  calling `set_price()` on the line's product object during
+  `woocommerce_before_calculate_totals` — `woocommerce_cart_item_price` only
+  changes what is *displayed*. Confusing the two is exactly the bug above.
+</VersionNote>
 
 ## Three layers of "where a change belongs"
 

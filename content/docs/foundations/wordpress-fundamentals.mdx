@@ -24,11 +24,11 @@ callbacks at specific points in it.
     'Web server routes the request to index.php',
     'wp-load.php → wp-settings.php boots WordPress',
     'Must-use plugins, then active plugins load — WooCommerce included',
-    'plugins_loaded fires — WooCommerce finishes initializing here',
-    'Theme loads: after_setup_theme',
-    'init fires — post types, taxonomies, shortcodes, sessions, REST routes register',
+    'plugins_loaded fires — WooCommerce fires woocommerce_loaded here',
+    'Theme loads: setup_theme → after_setup_theme',
+    'init fires — WooCommerce::init() runs at priority 0: post types, taxonomies, sessions, cart; then Store API routes on rest_api_init',
     'wp_loaded fires — everything is registered',
-    'Request is parsed to a query; the main query runs',
+    'Request is parsed to a query; the main query runs (parse_request → wp)',
     'template_redirect fires — last chance to intercept before output',
     'A template is chosen and rendered; hooks inside it fire during output',
   ]}
@@ -43,12 +43,13 @@ callbacks at specific points in it.
   avoid={<>Calling WooCommerce functions (<code>WC()</code>, <code>wc_get_product()</code>) at file load time, before WooCommerce has initialized.</>}
 />
 
-<VerifyNote>exact ordering and firing conditions of `plugins_loaded` / `init` / `wp_loaded` / `template_redirect` in WordPress 7.1, and the hook WooCommerce uses to complete its own init</VerifyNote>
-
 <VersionNote version="WordPress 7.1 · WooCommerce 11.0.1">
-  The hook *names* above are long-standing WordPress API and stable across
-  versions. The exact point at which WooCommerce completes its bootstrap is an
-  implementation detail — see [WooCommerce Architecture](/docs/foundations/woocommerce-architecture).
+  These WordPress action names (`plugins_loaded`, `setup_theme`,
+  `after_setup_theme`, `init`, `wp_loaded`, `parse_request`, `wp`,
+  `template_redirect`) are long-standing core API and fire in this order on a
+  normal front-end request. WooCommerce's own `init()` method is hooked to
+  WordPress `init` at priority `0`; the exact internal sequence is in
+  [WooCommerce Architecture](/docs/foundations/woocommerce-architecture#bootstrap-from-plugin-file-to-wc).
 </VersionNote>
 
 ## Post types
@@ -61,13 +62,18 @@ WooCommerce registers several custom post types:
 
 | Post type | Represents | Notes |
 | --- | --- | --- |
-| `product` | A catalog product | Public, has archives, uses custom taxonomies |
-| `product_variation` | One variation of a variable product | Child of a `product`, not shown in the admin list |
-| `shop_coupon` | A coupon | Admin-only |
-| `shop_order` | An order (legacy storage) | Superseded by HPOS tables — see below |
+| `product` | A catalog product | `public`, has archives, uses custom taxonomies |
+| `product_variation` | One variation of a variable product | Child of a `product`; not `public`, hidden from the admin list |
+| `shop_coupon` | A coupon | Not `public`; admin-only |
+| `shop_order` | An order | Registered for compatibility; **not** the storage under HPOS (see below) |
 | `shop_order_refund` | A refund against an order | Child of an order |
+| `shop_webhook` | A REST API webhook subscription | Internal |
 
-<VerifyNote>the full list of post types WooCommerce registers in 11.0.1 and their exact registration arguments (public, hierarchical, capabilities)</VerifyNote>
+WooCommerce also registers taxonomies attached to `product`: `product_cat`
+and `product_tag` (the visible catalog taxonomies), `product_type` and
+`product_visibility` (internal, `public => false`, `hierarchical => false`),
+and one taxonomy per global attribute, named `pa_<attribute>` (e.g.
+`pa_color`).
 
 <Callout type="warn">
   **Orders are the exception.** With High-Performance Order Storage (HPOS)
@@ -87,11 +93,17 @@ scale because `meta_value` is a long text column with no useful index.
 
 How WooCommerce uses it:
 
-- **Product data** — historically almost every product field (`_price`,
-  `_stock`, `_sku`, `_weight`, …) is post meta. <VerifyNote>current underscore-prefixed meta keys for core product fields in 11.0.1</VerifyNote>
+- **Product data** — almost every product field is post meta under an
+  underscore-prefixed key: `_regular_price`, `_sale_price`, `_price`, `_sku`,
+  `_stock`, `_stock_status`, `_weight`, `_length` / `_width` / `_height`,
+  `_tax_class`, `_manage_stock`, `_downloadable`, `_virtual`, and more.
 - **Lookup tables** — because meta queries are slow, WooCommerce maintains
-  flattened copies of hot fields (for example a product meta lookup table)
-  that the catalog queries hit instead of `wp_postmeta`. <VerifyNote>name and columns of the product meta lookup table</VerifyNote>
+  `wp_wc_product_meta_lookup` (added in WooCommerce 3.7): one row per product
+  with real columns for `sku`, `min_price` / `max_price`, `stock_status`,
+  `stock_quantity`, `onsale`, `rating_count`, `average_rating`, `total_sales`,
+  `virtual`, `downloadable`, `tax_status`, `tax_class`. Catalog queries and
+  sorting hit this table instead of `wp_postmeta`, and WooCommerce keeps it in
+  sync on save.
 - **CRUD abstraction** — you are encouraged to read product and order data
   through `WC_Product` / `WC_Order` getter methods, not `get_post_meta()`
   directly, so that HPOS and lookup tables stay correct. This is covered in
@@ -112,8 +124,11 @@ performance problem.
 
 WooCommerce uses options for essentially all store configuration — pages,
 currency, tax behavior, checkout options, email settings, gateway settings —
-generally under a `woocommerce_` key prefix. <VerifyNote>which WooCommerce
-option keys are autoloaded in 11.0.1 and their typical total size</VerifyNote>
+mostly under a `woocommerce_` key prefix (for example `woocommerce_currency`,
+`woocommerce_cart_page_id`, `woocommerce_calc_taxes`,
+`woocommerce_default_country`). Many are autoloaded; the store's own settings
+plus each active extension's settings all add to the per-request autoload
+payload.
 
 <Callout type="info">
   When the Performance section *(planned)* is written, autoloaded option
@@ -145,9 +160,10 @@ action, is a frequent source of "my code runs but nothing changes".
 
 <VersionNote version="WooCommerce 11.0.1">
   Hook *names* are the most version-sensitive API surface in WooCommerce.
-  WooDoc tags every specific hook name with <VerifyNote /> until it is checked
-  against core source for this release. The Development section *(planned)*
-  documents hook discovery and debugging in depth.
+  Specific hooks named across the Foundations pages have been checked against
+  WooCommerce 11.0.1; anything still unverified carries a <VerifyNote /> tag.
+  The Development section *(planned)* documents hook discovery and debugging in
+  depth.
 </VersionNote>
 
 ## Cron and scheduled work
@@ -158,12 +174,21 @@ It is fine for light, non-urgent work and unreliable for anything precise or
 high-volume.
 
 WooCommerce bundles **Action Scheduler**, a more robust queue built on top of
-WordPress that stores jobs in its own tables, processes them in batches, and
-retries failures. WooCommerce and many extensions use it for things like
-delayed emails, subscription renewals, webhook delivery, and data migrations
-(including the HPOS backfill).
+WordPress. Since Action Scheduler 3.0 it stores jobs in its own tables —
+`wp_actionscheduler_actions`, `wp_actionscheduler_logs`,
+`wp_actionscheduler_groups`, `wp_actionscheduler_claims` — processes them in
+batches on the `action_scheduler_run_queue` hook (dispatched roughly once a
+minute via WP-Cron), and retries failures. WooCommerce and many extensions
+use it for deferred emails, webhook delivery, analytics/report generation,
+and data migrations including the HPOS backfill.
 
-<VerifyNote>Action Scheduler table names, the hook it processes on, and which core WooCommerce jobs use it in 11.0.1</VerifyNote>
+<VersionNote version="WooCommerce 11.0 · Action Scheduler 4.0">
+  Two behaviour changes to know if you schedule your own jobs: unique-action
+  checks now include the action's **arguments** (previously hook + group only),
+  so more actions can be created than before; and failed actions are now
+  auto-purged after ~3 months (`action_scheduler_retention_period_for_failed`,
+  disable via `action_scheduler_enable_failed_action_cleanup`).
+</VersionNote>
 
 <SafetyLevel level="recommended">
   For your own deferred work in a WooCommerce context, schedule it through
@@ -178,15 +203,14 @@ API surfaces on top:
 
 | API | Base route | Purpose | Auth |
 | --- | --- | --- | --- |
-| WooCommerce REST API | `/wp-json/wc/v3/` | Server-to-server: products, orders, customers, reports | API keys (consumer key/secret) or WP auth |
-| Store API | `/wp-json/wc/store/v1/` | Front-end: cart, checkout, product browsing for Blocks and headless | Nonce / cart token; designed for the browser |
+| WooCommerce REST API | `/wp-json/wc/v3/` | Server-to-server: `products`, `orders`, `customers`, `coupons`, `products/reviews`, `reports`, `system_status`, settings, webhooks | API keys (consumer key/secret) or cookie auth + nonce |
+| Store API | `/wp-json/wc/store/v1/` | Front-end: `cart`, `cart/items`, `cart/coupons`, `checkout`, `products`, `products/collection-data` — drives the Cart/Checkout Blocks and headless | Cart token / nonce; designed for the browser, no API keys |
 
-<VerifyNote>current version segments (`wc/v3`, `wc/store/v1`) and the full resource list for each in 11.0.1</VerifyNote>
-
-The two are not interchangeable. The REST API is an admin/integration tool
-with full CRUD on stored records. The Store API is a customer-facing surface
-that manages a *session cart* and drives the Cart and Checkout Blocks. Both
-get their own pages in later phases (Development section, *planned*).
+The two are not interchangeable. `wc/v3` is an admin/integration tool with
+full CRUD on stored records. The Store API is a customer-facing surface that
+manages a *session cart* and drives the Cart and Checkout Blocks; it is
+versioned separately (`v1`) and is not a drop-in for `wc/v3`. Both get their
+own pages in later phases (Development section, *planned*).
 
 ## How this maps forward
 
