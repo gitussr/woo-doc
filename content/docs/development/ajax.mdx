@@ -15,31 +15,40 @@ where to hook it.
 <LayerStack
   layers={[
     { name: 'admin-ajax.php', note: 'WordPress core. POST to /wp-admin/admin-ajax.php with an action param. Handlers hook wp_ajax_<action> (logged in) and wp_ajax_nopriv_<action> (guests). Loads all of WordPress + admin.' },
-    { name: 'WC AJAX (wc-ajax)', note: 'WooCommerce\'s fast path. Request to /?wc-ajax=<action> (or the WC_AJAX::get_endpoint() URL). Handlers hook wc_ajax_<action> and wc_ajax_nopriv_<action>. Skips loading wp-admin, so it is lighter for front-end calls.' },
+    { name: 'WC AJAX (wc-ajax)', note: 'WooCommerce\'s fast path. Request to /?wc-ajax=<action> (or the WC_AJAX::get_endpoint() URL). do_wc_ajax() fires a single wc_ajax_<action> hook — there is no priv/nopriv split here. It sets no-cache headers and skips wp-admin, so it is lighter for front-end calls.' },
   ]}
 />
 
-Core front-end actions — `add_to_cart`, `remove_from_cart`, `apply_coupon`,
-`update_shipping_method`, `get_refreshed_fragments`, `update_order_review`,
-`checkout`, `get_variation` — go through **`wc-ajax`**.
-
-<VerifyNote>the complete list of built-in `wc_ajax_*` actions and whether any moved to the Store API in 11.0.1</VerifyNote>
+The public front-end actions routed through **`wc-ajax`** are:
+`get_refreshed_fragments`, `add_to_cart`, `remove_from_cart`,
+`apply_coupon`, `remove_coupon`, `update_shipping_method`, `get_cart_totals`,
+`update_order_review`, `checkout`, `get_variation`, and
+`get_customer_location`. `WC_AJAX` also registers each of these as
+`wp_ajax_woocommerce_<action>` and `wp_ajax_nopriv_woocommerce_<action>` so
+they still work over `admin-ajax.php`.
 
 ## Nonces and the params objects
 
 Front-end scripts receive their endpoint URLs and nonces from small localized
 objects that WooCommerce prints:
 
-| Object | Used by | Notable keys |
+| Object | Attached to handle | Notable keys |
 | --- | --- | --- |
-| `wc_add_to_cart_params` | add-to-cart JS | `ajax_url`, `wc_ajax_url`, `cart_url` |
-| `wc_cart_params` | cart page JS | `ajax_url`, `wc_ajax_url`, `update_shipping_method_nonce`, `apply_coupon_nonce` |
-| `wc_checkout_params` | checkout JS | `ajax_url`, `wc_ajax_url`, `update_order_review_nonce`, `checkout_url` |
-| `woocommerce_params` | shared | `ajax_url`, `wc_ajax_url` |
+| `woocommerce_params` | `woocommerce` | `ajax_url`, `wc_ajax_url` |
+| `wc_add_to_cart_params` | `wc-add-to-cart` | `ajax_url`, `wc_ajax_url`, `cart_url`, `is_cart` |
+| `wc_cart_params` | `wc-cart` | `ajax_url`, `wc_ajax_url`, `update_shipping_method_nonce`, `apply_coupon_nonce`, `remove_coupon_nonce` |
+| `wc_cart_fragments_params` | `wc-cart-fragments` | `ajax_url`, `wc_ajax_url`, `cart_hash_key`, `fragment_name`, `request_timeout` |
+| `wc_checkout_params` | `wc-checkout` | `ajax_url`, `wc_ajax_url`, `update_order_review_nonce`, `apply_coupon_nonce`, `remove_coupon_nonce`, `checkout_url`, `option_guest_checkout` |
+| `wc_country_select_params` / `wc_address_i18n_params` | `wc-country-select` / `wc-address-i18n` | country/state data, locale field ordering |
 
-<VerifyNote>the exact object names and nonce keys localized in 11.0.1, and the script handles they attach to</VerifyNote>
+<Callout type="info">
+  WooCommerce passes each nonce in the request's `security` field and checks it
+  server-side with `check_ajax_referer( '<action>', 'security' )`. Under the
+  Checkout Block none of these apply — the Store API uses its own
+  `Nonce` / `Cart-Token` headers.
+</Callout>
 
-On the server, verify with `check_ajax_referer( 'action-name', 'security' )`
+For your own handlers, verify with `check_ajax_referer( 'your-action', 'security' )`
 (or `wp_verify_nonce()`), then a capability check where the action is not
 purely public.
 
@@ -70,15 +79,18 @@ function wd_estimate() {
 ```
 
 Use the `wc-ajax` path instead when the call is high-frequency and does not
-need the admin environment:
+need the admin environment. It fires **one** hook for logged-in and guest
+users alike:
 
 ```php
-add_action( 'wc_ajax_wd_estimate',        'wd_estimate' );
-add_action( 'wc_ajax_nopriv_wd_estimate', 'wd_estimate' );
-// Endpoint: home_url( '/?wc-ajax=wd_estimate' )
+add_action( 'wc_ajax_wd_estimate', 'wd_estimate' ); // logged-in and guests
+// Endpoint: WC_AJAX::get_endpoint( 'wd_estimate' ) → /?wc-ajax=wd_estimate
 ```
 
-<VerifyNote>confirm `wc_ajax_nopriv_<action>` is still the guest hook name (vs. relying on a single `wc_ajax_<action>`) in 11.0.1</VerifyNote>
+<Callout type="warn">
+  There is no `wc_ajax_nopriv_*` hook. If you register only `wc_ajax_<action>`,
+  guests reach it too — so your nonce and capability checks are the only gate.
+</Callout>
 
 ## Cart fragments
 

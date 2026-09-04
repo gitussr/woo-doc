@@ -28,9 +28,10 @@ are how core builds cart/checkout URLs and redirects.
 
 <Callout type="warn">
   Removing the shortcode from the page, or deleting the page, breaks checkout
-  routing even if another page renders a cart. Repair via **WooCommerce →
-  Status → Tools → "Create default WooCommerce pages"**. <VerifyNote>exact tool
-  label in 11.0.1</VerifyNote>
+  routing even if another page renders a cart. Repair from **WooCommerce →
+  Status → Tools**, the **"Create default WooCommerce pages"** tool (its button
+  reads *Create pages*) — it recreates only missing pages and does not
+  overwrite existing ones.
 </Callout>
 
 <ClassicVsBlocks
@@ -48,15 +49,17 @@ For putting products into arbitrary content (a landing page, a blog post):
 | `[product_page id="99"]` | A full single-product layout for one product |
 | `[add_to_cart id="99"]` | Price + add-to-cart button for one product |
 | `[add_to_cart_url id="99"]` | Just the add-to-cart URL |
-| `[product_categories]` | A grid of category tiles |
+| `[product_categories]` / `[product_category]` | Category tiles / a single category's products |
+| `[product]`, `[featured_products]`, `[sale_products]`, `[best_selling_products]`, `[top_rated_products]`, `[recent_products]`, `[related_products]`, `[product_attribute]` | Still registered in 11.0.1 — all handled internally by the same `[products]` renderer with preset attributes |
+| `[shop_messages]` | WooCommerce notices (for full-site-editing themes) |
 
-<VerifyNote>the full current shortcode list, and which legacy product shortcodes (`[recent_products]`, `[featured_products]`, `[sale_products]`, …) are still registered vs. folded into `[products]` in 11.0.1</VerifyNote>
-
-The `[products]` query can be filtered:
+The full set is registered in `WC_Shortcodes::init()`. The `[products]` query
+can be filtered:
 
 ```php
-// Exclude out-of-stock products from every [products] shortcode.
+// Exclude out-of-stock products from every [products]-family shortcode.
 add_filter( 'woocommerce_shortcode_products_query', function ( $query_args, $atts, $type ) {
+    // $type is the loop name: 'products', 'sale_products', 'featured_products', …
     $query_args['meta_query'][] = array(
         'key'   => '_stock_status',
         'value' => 'instock',
@@ -65,7 +68,8 @@ add_filter( 'woocommerce_shortcode_products_query', function ( $query_args, $att
 }, 10, 3 );
 ```
 
-<VerifyNote>the `woocommerce_shortcode_products_query` filter signature and whether it still receives `$type` in 11.0.1</VerifyNote>
+`apply_filters( 'woocommerce_shortcode_products_query', $query_args, $atts, $type )`
+is called from `WC_Shortcode_Products::parse_query_args()`.
 
 ## Registering your own
 

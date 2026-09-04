@@ -97,10 +97,13 @@ a plugin adds the filter on a hook like `init`, you must remove it on a
 
 - Search the WooCommerce source for `apply_filters(` near the value you care
   about. Every filter's name and its context parameters are right there.
-- The `woocommerce_<object>_get_<prop>` pattern means you can often guess the
-  name from the getter method (`get_stock_status()` →
-  `woocommerce_product_get_stock_status`). <VerifyNote>confirm the get-filter
-  naming pattern and any exceptions for 11.0.1</VerifyNote>
+- The pattern is `woocommerce_<object_type>_get_<prop>`, applied by
+  `WC_Data::get_prop()` for every simple stored property — so you can usually
+  derive the name from the getter (`get_stock_status()` →
+  `woocommerce_product_get_stock_status`). The **computed** getters are the
+  exception — they carry their own hand-written filter names, e.g.
+  `get_price_html()` → `woocommerce_get_price_html`. When in doubt, grep the
+  class for `apply_filters`.
 - Query Monitor shows filters as well as actions for the current request.
 
 ## Related

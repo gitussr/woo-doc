@@ -22,15 +22,20 @@ Base: `/wp-json/wc/v3/`. Main resources:
 
 | Route | Purpose |
 | --- | --- |
-| `products`, `products/<id>/variations`, `products/categories`, `products/attributes` | Catalog CRUD |
+| `products`, `products/<id>/variations`, `products/categories`, `products/tags`, `products/attributes`, `products/reviews` | Catalog CRUD |
 | `orders`, `orders/<id>/notes`, `orders/<id>/refunds` | Order CRUD and history |
 | `customers` | Customer records |
 | `coupons` | Coupon CRUD |
-| `reports/*` | Sales, top sellers, totals |
+| `reports/*` | Legacy report summaries |
+| `tax_classes`, `taxes` | Tax config |
+| `shipping/zones`, `shipping_methods`, `payment_gateways` | Fulfilment / payment config |
 | `webhooks` | Outbound webhook subscriptions |
-| `system_status` | The status report as JSON |
+| `settings/<group>`, `system_status`, `data/*` | Store config, the status report as JSON, reference data |
 
-<VerifyNote>the complete `wc/v3` resource list and any routes added or deprecated in 11.0.1 (release notes mention analytics import endpoints under `wc-analytics`)</VerifyNote>
+The **Analytics** reports live under a separate namespace,
+`/wp-json/wc-analytics/…` (`reports/orders`, `reports/products`,
+`reports/revenue`, …), plus `imports/status` and `imports/retry-failed` added
+in WooCommerce 11.0 for managing failed historical-data imports.
 
 ### Auth
 
@@ -50,16 +55,20 @@ Base: `/wp-json/wc/v3/`. Main resources:
 
 ## Store API
 
-Base: `/wp-json/wc/store/v1/`. Main endpoints: `cart`, `cart/items`,
-`cart/coupons`, `cart/select-shipping-rate`, `cart/update-customer`,
-`checkout`, `products`, `products/collection-data`.
+Base: `/wp-json/wc/store/v1/`. Main endpoints: `cart`, `cart/add-item`,
+`cart/update-item`, `cart/remove-item`, `cart/apply-coupon`,
+`cart/remove-coupon`, `cart/update-customer`, `cart/select-shipping-rate`,
+`cart/extensions`, `checkout`, `batch`, `products`, `products/attributes`,
+`products/categories`, `products/collection-data`, `products/reviews`.
 
-<VerifyNote>the full `wc/store/v1` endpoint list and the current cart-token header name (`Cart-Token` / `Nonce`) for 11.0.1</VerifyNote>
-
-It is **stateful**: requests carry a cart token that identifies the
+It is **stateful**: a **`Cart-Token`** header (a JWT, returned on the first
+`GET /cart` response) identifies the
 [WooCommerce session](/docs/foundations/woocommerce-architecture#sessions), so
-`POST wc/store/v1/cart/add-item` mutates *this visitor's* cart. This is why it
-is safe to call from the browser and why it is not a general integration API.
+`POST wc/store/v1/cart/add-item` mutates *this visitor's* cart. `POST` to
+`/cart/*` and all `/checkout` requests also require a **`Nonce`** header —
+unless a `Cart-Token` is supplied, in which case the nonce is not needed.
+This is why the Store API is safe to call from the browser and is not a
+general integration API.
 
 Extend it with `ExtendSchema` rather than raw filters — see
 [Blocks → server side](/docs/development/blocks#server-side-attach-and-receive-data).

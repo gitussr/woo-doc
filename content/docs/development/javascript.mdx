@@ -18,18 +18,20 @@ with React and `@wordpress/data`; the split is noted throughout.
 Enqueue your script with the relevant handle as a dependency so it loads
 after WooCommerce's:
 
-| Handle | Loads on | Drives |
+| Handle | File (`assets/js/frontend/`) | Drives |
 | --- | --- | --- |
-| `woocommerce` | WooCommerce pages | Shared helpers |
-| `wc-add-to-cart` | Shop / archive pages | AJAX add-to-cart from product loops |
-| `wc-single-product` | Single product | Variation form, image gallery/zoom |
-| `wc-cart` | Cart page | Quantity updates, coupon, shipping calculator |
-| `wc-checkout` | Checkout page | Field validation, `update_checkout`, place order |
-| `wc-cart-fragments` | see below | Mini-cart refresh via `sessionStorage` |
-| `wc-country-select` / `wc-address-i18n` | Cart / checkout / account | Country → state select behavior, locale field ordering |
-| `selectWoo` | forms with enhanced selects | The bundled Select2 fork |
+| `woocommerce` | `woocommerce.js` | Shared helpers; carries `woocommerce_params` |
+| `wc-add-to-cart` | `add-to-cart.js` | AJAX add-to-cart from product loops |
+| `wc-add-to-cart-variation` | `add-to-cart-variation.js` | The variation form on variable products |
+| `wc-single-product` | `single-product.js` | Gallery, zoom, review rating |
+| `wc-cart` | `cart.js` | Quantity updates, coupon, shipping calculator |
+| `wc-checkout` | `checkout.js` | Field validation, `update_checkout`, place order |
+| `wc-cart-fragments` | `cart-fragments.js` | Mini-cart refresh via `sessionStorage` |
+| `wc-country-select` / `wc-address-i18n` | `country-select.js` / `address-i18n.js` | Country → state select, locale field ordering |
+| `selectWoo` | `assets/js/selectWoo/selectWoo.full.js` | The bundled Select2 fork |
 
-<VerifyNote>the exact registered handles and their file paths in 11.0.1, and which are still enqueued by default vs. conditionally</VerifyNote>
+All are registered in `WC_Frontend_Scripts` and enqueued only on the pages
+that need them (cart script on the cart page, and so on).
 
 ## The event bus
 
@@ -50,12 +52,14 @@ Bind to these on `$( document.body )`:
 
 | Event | Fires when |
 | --- | --- |
-| `init_checkout` | Checkout script initialises |
+| `init_checkout` | The checkout script initialises |
 | `update_checkout` | *Trigger this* to ask WooCommerce to recalculate the review order |
-| `updated_checkout` | The review-order fragment finished refreshing |
-| `checkout_error` | Server-side validation failed on place-order |
-| `country_to_state_changed` | The country select changed and states were rebuilt |
+| `updated_checkout` | The review-order fragment finished refreshing (receives `[ data ]`) |
+| `checkout_error` | Server-side validation failed on place-order (receives `[ error_message ]`) |
+| `checkout_place_order` / `checkout_place_order_<gateway>` | Just before the order is submitted — return `false` to abort |
+| `applied_coupon_in_checkout` / `removed_coupon_in_checkout` | A coupon was applied / removed on the checkout form |
 | `payment_method_selected` | The customer picked a different gateway |
+| `country_to_state_changed` | The country select changed and the state field was rebuilt (from `wc-country-select`) |
 
 ```js
 // Recalculate checkout whenever a custom field changes.
@@ -65,8 +69,6 @@ jQuery( function ( $ ) {
     } );
 } );
 ```
-
-<VerifyNote>confirm this event list and names against the bundled 11.0.1 scripts; note which are documented vs. de-facto</VerifyNote>
 
 <Callout type="warn">
   Under the **Checkout Block**, `update_checkout` / `updated_checkout` /
@@ -105,9 +107,9 @@ add_filter( 'woocommerce_add_to_cart_fragments', function ( $fragments ) {
   The background <code>get_refreshed_fragments</code> request is uncached and
   runs on <em>every</em> page for every visitor with the script loaded — a
   measurable TTFB cost on a busy store. Since WooCommerce 7.8 core only
-  enqueues <code>wc-cart-fragments</code> when the Mini-Cart is present. If you
-  do not use a live mini-cart, keep it dequeued outside cart/checkout.
-  <VerifyNote>confirm the 7.8 conditional-enqueue behavior still holds in 11.0.1</VerifyNote>
+  enqueues <code>wc-cart-fragments</code> when a Mini-Cart (widget or block) is
+  present on the page. If a theme or plugin still loads it site-wide and you
+  do not use a live mini-cart, dequeue it outside cart/checkout.
 </SafetyLevel>
 
 ## Blocks: reading state in JS

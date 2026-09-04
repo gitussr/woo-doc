@@ -28,7 +28,7 @@ replacements are below and on the [Hooks](/docs/development/hooks) page.
 <LayerStack
   layers={[
     { name: 'Block settings', note: 'Attributes exposed in the block editor. The no-code layer — merchants toggle these.' },
-    { name: 'Slot / Fill', note: 'React fills rendered into named regions: ExperimentalOrderMeta (below order summary), ExperimentalOrderShippingPackages, ExperimentalDiscountsMeta. Registered with registerPlugin() and render_scope "woocommerce-checkout".' },
+    { name: 'Slot / Fill', note: 'React fills rendered into named regions: ExperimentalOrderMeta, ExperimentalOrderShippingPackages, ExperimentalOrderLocalPickupPackages, ExperimentalDiscountsMeta. Registered with registerPlugin() at scope "woocommerce-checkout".' },
     { name: 'Checkout filters (JS)', note: 'registerCheckoutFilters( namespace, { … } ) from @woocommerce/blocks-checkout — transform strings like item names, totals labels, the place-order button text, client-side.' },
     { name: 'Inner blocks', note: 'registerCheckoutBlock() adds a custom block into a permitted area of the Checkout (e.g. the contact or shipping step), with locking rules.' },
     { name: 'IntegrationInterface (PHP)', note: 'A class implementing Automattic\\WooCommerce\\Blocks\\Integrations\\IntegrationInterface, registered on the woocommerce_blocks_checkout_block_registration / woocommerce_blocks_cart_block_registration actions, to enqueue your scripts/styles and pass data.' },
@@ -57,7 +57,12 @@ registerPlugin( 'wd-gift-note', {
 } );
 ```
 
-<VerifyNote>the exact package name (`@woocommerce/blocks-checkout` vs `@woocommerce/blocks-components`), the `Experimental*` fill names, and the `scope` string for 11.0.1's bundled Blocks version</VerifyNote>
+The four fills are `ExperimentalOrderMeta` (below the order summary, above
+Proceed to Checkout), `ExperimentalOrderShippingPackages` (the shipping step),
+`ExperimentalOrderLocalPickupPackages` (the pickup-options block), and
+`ExperimentalDiscountsMeta` (below the coupon-code input). Import from
+`@woocommerce/blocks-checkout` (webpack-aliased to `window.wc.blocksCheckout`);
+render via `registerPlugin` with `scope: 'woocommerce-checkout'`.
 
 ## Reading cart / checkout state
 
@@ -68,27 +73,44 @@ Client code reads state from `@wordpress/data` stores, not from globals:
 | `wc/store/cart` | Cart items, totals, coupons, shipping rates, customer address |
 | `wc/store/checkout` | Checkout status, order ID, custom extension data |
 | `wc/store/payment` | Selected payment method, payment status |
+| `wc/store/validation` | Field validation errors |
 
-`@woocommerce/settings` (`wc.wcSettings`) exposes `getSetting()` for values
-your `IntegrationInterface` passed from PHP.
-
-<VerifyNote>the current data-store names and whether `useStoreCart` / other hooks from `@woocommerce/base-context` are still the supported read path in 11.0.1</VerifyNote>
+Read them with `select()` / `useSelect()` from `@wordpress/data`. WooCommerce's
+docs now steer extensions to the data stores rather than internal hooks like
+`useStoreCart` from `@woocommerce/base-context`. `@woocommerce/settings`
+(`wc.wcSettings`) exposes `getSetting()` for values your `IntegrationInterface`
+passed from PHP.
 
 ## Server side: attach and receive data
 
 ```php
+use Automattic\WooCommerce\StoreApi\Schemas\V1\CartSchema;
+
 // Expose data on the Store API cart response, namespaced to your plugin.
 add_action( 'woocommerce_init', function () {
     woocommerce_store_api_register_endpoint_data( array(
-        'endpoint'        => Automattic\WooCommerce\StoreApi\Schemas\V1\CartSchema::IDENTIFIER,
+        'endpoint'        => CartSchema::IDENTIFIER,
         'namespace'       => 'wd-gift',
         'data_callback'   => fn() => array( 'note' => WC()->session->get( 'wd_gift_note', '' ) ),
         'schema_callback' => fn() => array( 'note' => array( 'type' => 'string' ) ),
+        'schema_type'     => ARRAY_A,
+    ) );
+} );
+
+// Receive it back: register a callback the Blocks call via cart/extensions.
+add_action( 'woocommerce_init', function () {
+    woocommerce_store_api_register_update_callback( array(
+        'namespace' => 'wd-gift',
+        'callback'  => fn( $data ) => WC()->session->set( 'wd_gift_note', sanitize_text_field( $data['note'] ?? '' ) ),
     ) );
 } );
 ```
 
-<VerifyNote>the `CartSchema::IDENTIFIER` constant / correct `endpoint` value and the full `woocommerce_store_api_register_endpoint_data()` argument shape for 11.0.1</VerifyNote>
+`endpoint` takes a schema identifier — use the `::IDENTIFIER` constant on the
+route schema class (`CartSchema`, `CheckoutSchema`, `ProductSchema`, …) rather
+than a literal string. `woocommerce_store_api_register_update_callback()` is
+invoked through the `POST wc/store/v1/cart/extensions` endpoint (and
+`batch`).
 
 Declare compatibility so the merchant can use the Blocks with your plugin
 active — see
@@ -106,11 +128,10 @@ active — see
 </DecisionGuide>
 
 <VersionNote version="WooCommerce 11.0.1">
-  The Blocks APIs move faster than core PHP and several are marked
-  `Experimental`. Build against a pinned WooCommerce version and re-test on
-  each minor upgrade. Names on this page are checked against the Blocks
-  package bundled with 11.0.1 where marked; unresolved specifics carry a
-  <VerifyNote /> tag for the Phase 3 accuracy pass.
+  The Blocks APIs move faster than core PHP and the Slot/Fill names are still
+  exported as `Experimental*`. The names here match the WooCommerce Blocks
+  documentation; treat them as unstable, build against a pinned WooCommerce
+  version, and re-test on each minor upgrade.
 </VersionNote>
 
 ## Related

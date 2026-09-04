@@ -58,14 +58,18 @@ source of truth for scope and sequencing.
 
 Phase 2 (Foundations) is content-complete and through its accuracy pass.
 
-Phase 3 (Development toolkit) content is **drafted**: `content/docs/development/`
-has `hooks`, `filters`, `templates`, `shortcodes`, `blocks`, `ajax`,
-`rest-api`, `javascript`, wired into root `meta.json` after `foundations`.
-Remaining for Phase 3: the **accuracy pass** — ~23 `VerifyNote` tags across
-those 8 pages, to be resolved against WooCommerce 11.0.1 core source
-(`wc-ajax` action list, script handles, JS event names, Store API endpoint
-list + `ExtendSchema` arg shape, shortcode list, deprecated-hook handler).
-Then Phase 4 (commerce lifecycle) — see roadmap.
+Phase 3 (Development toolkit) is **content-complete and through its accuracy
+pass**: `content/docs/development/` has `hooks`, `filters`, `templates`,
+`shortcodes`, `blocks`, `ajax`, `rest-api`, `javascript`, wired into root
+`meta.json` after `foundations`. All `VerifyNote` tags resolved against
+WooCommerce 11.0.1 core source and developer docs (Sept 2026): `WC_AJAX`
+event list + single `wc_ajax_` hook, frontend script handles + localized
+params, `checkout.js` JS events, `WC_Shortcodes` registrations +
+`woocommerce_shortcode_products_query`, `wc_get_template` signature, Store API
+endpoint list + `Cart-Token`/`Nonce` headers, `ExtendSchema` helper shapes,
+Blocks Slot/Fill names + scope, `WC_Deprecated_*_Hooks`.
+
+Next: Phase 4 (commerce lifecycle) — see roadmap.
 
 Remaining `VerifyNote` tags elsewhere: `about/design-system.mdx` only, as
 intentional component demos.

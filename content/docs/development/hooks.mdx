@@ -80,9 +80,10 @@ Practical tools:
 - **WooCommerce templates** carry `do_action()` calls with clear names
   (`woocommerce_before_main_content`, `woocommerce_single_product_summary`, …).
   The template file *is* the hook map for classic output.
-- **`wc-template-hooks.php`** in the WooCommerce plugin wires core callbacks to
-  those actions — read it to see what already runs at each position and at
-  what priority. <VerifyNote>exact path of the template-hooks file in 11.0.1</VerifyNote>
+- **`plugins/woocommerce/includes/wc-template-hooks.php`** wires core
+  callbacks to those actions — read it to see what already runs at each
+  position and at what priority (the callback bodies are in
+  `wc-template-functions.php`).
 - **Query Monitor** (plugin) lists every hook fired on the current request,
   with callbacks and file references.
 - **`all` hook** — for a one-off trace, `add_action( 'all', … )` logs every
@@ -109,10 +110,11 @@ Common reasons a hook "doesn't fire":
 | Fires but output is missing | Wrong priority — another callback removed or overwrote it later |
 
 <VersionNote version="WooCommerce 11.0.1">
-  WooCommerce keeps a deprecated-hook handler that maps some removed hook names
-  to current ones and emits a notice when the old name is used. Do not rely on
-  it — treat a deprecation notice as "fix this now". <VerifyNote>the class name
-  and list of mapped hooks for 11.0.1</VerifyNote>
+  WooCommerce instantiates `WC_Deprecated_Action_Hooks` and
+  `WC_Deprecated_Filter_Hooks` (both extend `WC_Deprecated_Hooks`) during
+  `WooCommerce::init()`. They map a set of renamed hooks to their replacements
+  and emit a `_deprecated_hook()` notice when the old name is used. Do not rely
+  on this shim — treat a deprecation notice as "fix this now".
 </VersionNote>
 
 ## Related

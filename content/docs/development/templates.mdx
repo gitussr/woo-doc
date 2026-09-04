@@ -57,12 +57,13 @@ Core renders a fragment by calling `wc_get_template()` or
 
 ### A plugin can provide templates too
 
-`wc_get_template()` takes `$template_path` and `$default_path` arguments. A
-plugin that calls `wc_get_template( 'foo.php', $args, '', plugin_dir_path( __FILE__ ) . 'templates/' )`
-ships its own template that themes can still override via the standard
-`woocommerce/` folder. <VerifyNote>confirm the `$template_path` /
-`$default_path` argument order and the theme-override precedence for
-plugin-provided templates in 11.0.1</VerifyNote>
+The signature is
+`wc_get_template( $template_name, $args = array(), $template_path = '', $default_path = '' )`.
+A plugin that calls
+`wc_get_template( 'foo.php', $args, '', plugin_dir_path( __FILE__ ) . 'templates/' )`
+ships its own default while `wc_locate_template()` still checks the theme's
+`woocommerce/foo.php` first — so themes can override plugin-provided templates
+exactly as they override core ones.
 
 ## Variables in scope
 
@@ -74,12 +75,14 @@ Common examples:
 
 | Template | In scope |
 | --- | --- |
-| `single-product/*.php` | `$product` (global `$product` is also set) |
-| `cart/cart.php` | the cart is read from `WC()->cart` |
+| `single-product/*.php` | `$product` (the global `$product` is also set) |
+| `cart/cart.php` | no `$args`; reads `WC()->cart` directly |
 | `checkout/form-checkout.php` | `$checkout` (a `WC_Checkout` instance) |
-| `emails/*.php` | `$order`, `$email`, `$sent_to_admin`, `$plain_text` |
+| `emails/email-order-details.php` | `$order`, `$sent_to_admin`, `$plain_text`, `$email` |
+| `cart/cart-totals.php`, `checkout/review-order.php` | no `$args`; read `WC()->cart` |
 
-<VerifyNote>the exact `$args` keys passed to the most-overridden templates (cart, checkout review, email order details) in 11.0.1</VerifyNote>
+Each core template's docblock lists what it can rely on; the `wc_get_template()`
+call site is the authoritative source.
 
 ## Template parts and hooks inside templates
 
