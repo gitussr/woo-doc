@@ -57,21 +57,20 @@ add_filter( 'woocommerce_checkout_fields', function ( $fields ) {
 
 <Callout type="warn">
   `woocommerce_checkout_fields` and the address-field filters **do not run
-  under the Checkout Block.** For the Block, register an additional checkout
-  field with the Blocks field API, or add an inner block — see
-  [Blocks](/docs/development/blocks).
-  <VerifyNote>the current Blocks "additional checkout fields" registration
-  function name and signature for 11.0.1</VerifyNote>
+  under the Checkout Block.** For the Block, call
+  `woocommerce_register_additional_checkout_field()` (after `woocommerce_init`)
+  with a `location` of `contact` (saved to the account), `address` (rendered in
+  both billing and shipping), or `order` (saved to the order only), plus
+  `id`, `label`, `type` (`text` / `select` / `checkbox`), and optional
+  `sanitize_callback` / `validate_callback`.
 </Callout>
 
 ## Validation
 
 <ClassicVsBlocks
-  classic="woocommerce_checkout_process (add wc_add_notice( …, 'error' ) to block submission) and woocommerce_after_checkout_validation ( $data, $errors — a WP_Error )."
-  blocks="Server: woocommerce_store_api_checkout_update_order_from_request and the Store API's own schema validation. Client: the wc/store/validation data store. The classic notices API is not used."
+  classic="woocommerce_checkout_process (no args — call wc_add_notice( …, 'error' ) to block submission), then woocommerce_after_checkout_validation ( $data, $errors ) where $errors is a WP_Error you can add to."
+  blocks="Server: the Store API validates against each endpoint's schema; woocommerce_store_api_checkout_update_order_from_request runs during order build. Client: the wc/store/validation data store holds errors. The classic wc_add_notice flow is not used."
 />
-
-<VerifyNote>confirm `woocommerce_checkout_process` and `woocommerce_after_checkout_validation` parameters, and the Store API validation hook names, for 11.0.1</VerifyNote>
 
 ## Order creation
 

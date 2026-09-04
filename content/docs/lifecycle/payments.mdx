@@ -49,7 +49,12 @@ public function process_payment( $order_id ) {
 }
 ```
 
-<VerifyNote>confirm the `process_payment()` return-array keys and the `payment_complete()` / `get_return_url()` behavior for 11.0.1</VerifyNote>
+`process_payment()` returns `array( 'result' => 'success', 'redirect' => $url )`
+on success (WooCommerce redirects the browser there) or
+`array( 'result' => 'failure' )` on failure (the checkout page re-renders with
+any notices you added). `get_return_url( $order )` is the order-received
+("thank you") URL. `payment_complete( $transaction_id = '' )` records the
+transaction and moves the order forward — see below.
 
 ## Redirect vs direct
 
@@ -71,19 +76,20 @@ public function process_payment( $order_id ) {
 Asynchronous processor notifications ("this payment succeeded / was disputed /
 was refunded") arrive at a WooCommerce-provided URL:
 
-- `WC()->api_request_url( 'my_gateway' )` gives a clean endpoint
-  (`/wc-api/my_gateway/`); the `woocommerce_api_my_gateway` action fires when
-  it is hit.
-- The handler must **verify the signature**, look the order up, and move it
-  (`payment_complete()`, `update_status( 'failed' )`, `$order->add_order_note()`).
+- `WC()->api_request_url( 'my_gateway' )` returns
+  `home_url( '/wc-api/my_gateway/' )` (or the `?wc-api=my_gateway` form).
+  `WC_API::handle_api_requests()` fires `woocommerce_api_my_gateway` when that
+  URL is hit — this predates the REST API and is still the common gateway
+  webhook mechanism; a custom `register_rest_route()` endpoint works too.
+- The handler must **verify the processor's signature**, look the order up,
+  and move it (`$order->payment_complete()`,
+  `$order->update_status( 'failed' )`, `$order->add_order_note()`).
 
 <SafetyLevel level="dangerous">
   A webhook endpoint with no signature verification lets anyone mark any order
   paid. Verify the processor's signature on every call, and treat the payload
   as untrusted input.
 </SafetyLevel>
-
-<VerifyNote>confirm the `wc-api` / `WC_API` request URL mechanism and the `woocommerce_api_<id>` hook name for 11.0.1 (vs. registering a REST route)</VerifyNote>
 
 ## Marking an order paid
 
@@ -103,25 +109,28 @@ was refunded") arrive at a WooCommerce-provided URL:
 
 | Piece | Role |
 | --- | --- |
-| `WC_Payment_Token` (+ `WC_Payment_Token_CC`, `_eCheck`) | A stored reference to a payment method — never raw card data |
-| `WC_Payment_Tokens` | Query/store API: `get_customer_tokens()`, `get()`, `set_users_default()` |
+| `WC_Payment_Token` (abstract) + `WC_Payment_Token_CC` / `WC_Payment_Token_eCheck` | A stored reference to a payment method (`gateway_id`, `token`, `user_id`, `type`, `is_default`; CC adds `last4`, `expiry_month/year`, `card_type`) — never raw card data |
+| `WC_Payment_Tokens` | The facade: `get_customer_tokens()`, `get_order_tokens()`, `get()`, `get_customer_default_token()` |
 | `$gateway->supports( 'tokenization' )` | Enables the "save method" checkbox and the saved-methods list at checkout |
 
-The processor holds the sensitive data; WooCommerce stores only its token.
-This keeps most stores out of PCI-DSS scope for card data.
-
-<VerifyNote>confirm the `WC_Payment_Token*` class names and the `woocommerce_payment_tokens` table for 11.0.1</VerifyNote>
+Tokens live in `wp_woocommerce_payment_tokens` + `wp_woocommerce_payment_tokenmeta`.
+The processor holds the sensitive data; WooCommerce stores only its token —
+which keeps most stores out of PCI-DSS scope for card data.
 
 ## Blocks
 
 The Checkout Block does not call `payment_fields()`. A gateway registers a
-**payment method integration** for the Block separately — a JS module
-implementing the payment method interface (`name`, `content`, `edit`,
-`canMakePayment`, `ariaLabel`, `supports`) registered with
-`registerPaymentMethod()` / `registerExpressPaymentMethod()`, backed by a PHP
-`AbstractPaymentMethodType`.
+**payment method integration** for the Block separately:
 
-<VerifyNote>confirm `registerPaymentMethod` / `AbstractPaymentMethodType` names and the registration hook (`woocommerce_blocks_payment_method_type_registration`) for 11.0.1</VerifyNote>
+- **Client** — a JS config object (`name`, `label`, `content`, `edit`,
+  `canMakePayment`, `ariaLabel`, `supports`) passed to `registerPaymentMethod()`
+  (or `registerExpressPaymentMethod()` for express buttons) from
+  `@woocommerce/blocks-registry`.
+- **Server** — a class extending
+  `Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType`,
+  registered on the `woocommerce_blocks_payment_method_type_registration`
+  action (inside a `woocommerce_blocks_loaded` callback) via
+  `$payment_method_registry->register( new My_Method() )`.
 
 ## Related
 

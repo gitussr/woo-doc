@@ -59,19 +59,25 @@ source of truth for scope and sequencing.
 Phases 2 (Foundations) and 3 (Development toolkit) are content-complete and
 through their accuracy passes.
 
-Phase 4 (Commerce Lifecycle) content is **drafted**: `content/docs/lifecycle/`
-has `products`, `cart`, `checkout`, `orders`, `payments`, `shipping-and-tax`,
-`emails`, grouped under a "Commerce Lifecycle" folder and wired into root
-`meta.json` after `development`. IA tree + section reference updated.
-Remaining for Phase 4: the **accuracy pass** — ~26 `VerifyNote` tags across
-those 7 pages, to be resolved against WooCommerce 11.0.1 core source (totals
-pipeline class, order status slugs + transition/refund hooks, stock
-reserve/reduce hooks, tax table + rounding/calc hooks, shipping package/rate
-hooks, `WC_Payment_Gateway` + token classes + `wc-api` webhook mechanism,
-Blocks payment method API, email class ids + `*_notification` triggers +
-content hooks, block email editor flag).
+Phase 4 (Commerce Lifecycle) is **content-complete and through its accuracy
+pass**: `content/docs/lifecycle/` has `products`, `cart`, `checkout`,
+`orders`, `payments`, `shipping-and-tax`, `emails`, grouped under a "Commerce
+Lifecycle" folder and wired into root `meta.json` after `development`. IA tree
++ section reference updated. `VerifyNote` tags resolved against WooCommerce
+11.0.1 core source (Sept 2026): `WC_Cart_Totals` + `generate_cart_id`,
+`wc_get_order_statuses` list + `wc-checkout-draft` + custom-status
+registration, `wc_maybe_reduce/increase_stock_levels` hooks + `ReserveStock` +
+`woocommerce_hold_stock_minutes`, `wc_create_refund` keys + refund hooks,
+`WC_Tax::calc_tax` + rounding option + tax tables + `woocommerce_tax_based_on`,
+shipping package/rate filters + classic-vs-Block selection, `WC_Payment_*` +
+`wc-api` webhook mechanism + token tables, Blocks payment method
+(`registerPaymentMethod` / `AbstractPaymentMethodType`), email class ids +
+`*_notification` trigger mechanism + content hook params, Block email editor
+(Advanced → Features), `woocommerce_scheduled_sales`, `woocommerce_product_class`,
+`woocommerce_register_additional_checkout_field`. No open `VerifyNote` tags
+remain in `content/docs/lifecycle/`.
 
-Then Phase 5 (data and storage — Database, HPOS) — see roadmap.
+Next: Phase 5 (data and storage — Database, HPOS) — see roadmap.
 
 Remaining `VerifyNote` tags elsewhere: `about/design-system.mdx` only, as
 intentional component demos.

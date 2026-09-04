@@ -43,7 +43,10 @@ grouped here because they interact — tax is calculated on shipping too.
   avoid={<>Hiding the rate only in the template — it is still selectable via the Store API and can be chosen.</>}
 />
 
-<VerifyNote>confirm `woocommerce_cart_shipping_packages`, `woocommerce_package_rates`, and `WC_Shipping_Rate` for 11.0.1; add the classic vs Block shipping-selection difference</VerifyNote>
+<ClassicVsBlocks
+  classic="Rates render in the review-order table; choosing one posts via wc-ajax (update_shipping_method / update_order_review) and stores chosen_shipping_methods in the session."
+  blocks="The Cart/Checkout Block shows rates from the Store API; POST wc/store/v1/cart/select-shipping-rate stores the choice. Same WC_Shipping packages and woocommerce_package_rates filter underneath."
+/>
 
 ### Adding a shipping method
 
@@ -58,12 +61,10 @@ and register via `woocommerce_shipping_methods`.
 <LayerStack
   layers={[
     { name: 'Tax class', note: 'Standard, Reduced rate, Zero rate, plus custom. A product\'s _tax_class picks one; _tax_status (taxable / shipping / none) decides if it is taxed at all.' },
-    { name: 'Tax rate', note: 'a row: country, state, postcode, city, rate %, name, priority, compound, applies-to-shipping. Stored in the tax-rate tables, not options.' },
-    { name: 'Tax location', note: 'the address the rate is matched against — "Tax based on": shop base address, customer billing, or customer shipping (the default).' },
+    { name: 'Tax rate', note: 'a row: country, state, postcode, city, rate %, name, priority, compound, applies-to-shipping. Stored in wp_woocommerce_tax_rates and wp_woocommerce_tax_rate_locations, not options.' },
+    { name: 'Tax location', note: 'the address the rate is matched against — the woocommerce_tax_based_on option: "shipping" (default), "billing", or "base" (shop address).' },
   ]}
 />
-
-<VerifyNote>confirm the tax-rate table names (`wp_woocommerce_tax_rates`, `wp_woocommerce_tax_rate_locations`) and the `woocommerce_tax_based_on` option values for 11.0.1</VerifyNote>
 
 ### The calculation
 
@@ -71,12 +72,15 @@ and register via `woocommerce_shipping_methods`.
   steps={[
     'For each line, fee, and the shipping total: find the product\'s tax class and status',
     'Match tax rates for that class against the tax location',
-    'WC_Tax::calc_tax() applies matched rates (compound rates stack on top of prior tax)',
-    'Rounding: per the "round at subtotal level" setting — either each line is rounded then summed, or the untotalled tax is summed then rounded once',
-    'If prices are entered inclusive of tax, the tax is first extracted from the displayed price',
+    'WC_Tax::calc_tax( $price, $rates, $price_includes_tax ) applies matched rates (compound rates stack on prior tax); the result passes through the woocommerce_calc_tax filter',
+    'Rounding: the woocommerce_tax_round_at_subtotal option — "yes" sums untotalled tax then rounds once; "no" rounds each line then sums',
+    'If prices are entered inclusive of tax (wc_prices_include_tax()), the tax is first extracted from the stored price',
   ]}
   caption="Tax is computed on lines, fees, and shipping separately, then rounded per the store's rounding mode."
 />
+
+Rate matching is `WC_Tax::find_rates()` / `WC_Tax::get_matched_tax_rates()` —
+filterable via `woocommerce_find_rates` and `woocommerce_matched_tax_rates`.
 
 <Callout type="warn">
   **Prices entered with or without tax** (`woocommerce_prices_include_tax`) is
@@ -85,8 +89,6 @@ and register via `woocommerce_shipping_methods`.
   source of most "the total is off by a cent" reports. Changing it on a live
   store re-interprets every existing price.
 </Callout>
-
-<VerifyNote>confirm `WC_Tax::calc_tax()`, the rounding-mode option (`woocommerce_tax_round_at_subtotal`), and the `woocommerce_calc_tax` / `woocommerce_matched_tax_rates` filter names for 11.0.1</VerifyNote>
 
 ### Where tax display is decided
 

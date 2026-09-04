@@ -33,19 +33,22 @@ add_filter( 'woocommerce_email_classes', function ( $emails ) {
 
 | Email (id) | Sent to | Triggered by |
 | --- | --- | --- |
-| New order (`new_order`) | Admin | Order enters `processing` (and other paid statuses) |
-| Cancelled order (`cancelled_order`) | Admin | Order → `cancelled` |
-| Failed order (`failed_order`) | Admin | Order → `failed` |
-| Processing order (`customer_processing_order`) | Customer | Order → `processing` |
-| Completed order (`customer_completed_order`) | Customer | Order → `completed` |
-| Refunded order (`customer_refunded_order`) | Customer | Order refunded (full or partial) |
-| Order on-hold (`customer_on_hold_order`) | Customer | Order → `on-hold` |
-| Invoice / order details (`customer_invoice`) | Customer | Sent manually from the order screen (also used for pending-payment) |
-| Customer note (`customer_note`) | Customer | `$order->add_order_note( $text, true )` |
-| Reset password (`customer_reset_password`) | Customer | Password reset request |
-| New account (`customer_new_account`) | Customer | Account created |
+| New order (`new_order`) | Admin | Transitions into `processing` / `completed` (`pending_to_processing`, `failed_to_processing`, `cancelled_to_processing`, `on-hold_to_processing`, `pending_to_completed`, …) |
+| Cancelled order (`cancelled_order`) | Admin | `processing_to_cancelled`, `on-hold_to_cancelled`, `pending_to_cancelled` |
+| Failed order (`failed_order`) | Admin | `pending_to_failed`, `on-hold_to_failed` |
+| Processing order (`customer_processing_order`) | Customer | Transitions into `processing` |
+| Completed order (`customer_completed_order`) | Customer | `woocommerce_order_status_completed` |
+| Refunded order (`customer_refunded_order`) | Customer | `woocommerce_order_fully_refunded` / `_partially_refunded` |
+| Order on-hold (`customer_on_hold_order`) | Customer | Transitions into `on-hold` |
+| Invoice / order details (`customer_invoice`) | Customer | Sent manually from the order screen |
+| Customer note (`customer_note`) | Customer | `woocommerce_new_customer_note` (`$order->add_order_note( $text, true )`) |
+| Reset password (`customer_reset_password`) | Customer | `woocommerce_reset_password_notification` |
+| New account (`customer_new_account`) | Customer | `woocommerce_created_customer` |
 
-<VerifyNote>confirm the email ids, default recipients, and the exact `*_notification` trigger hooks each class registers for 11.0.1</VerifyNote>
+`WC_Emails::init_transactional_emails()` registers a `<action>_notification`
+handler for each status-transition action above; that handler calls the
+matching email's `trigger()`. Each `WC_Email_*` subclass also hooks its own
+`*_notification` actions in its constructor.
 
 <WhereFrom
   looking={<>The <strong>"Your order is now processing"</strong> email.</>}
@@ -75,25 +78,24 @@ accent colour are settings, not template edits
 
 | Hook | Use |
 | --- | --- |
-| `woocommerce_email_classes` | Register a custom email |
-| `woocommerce_email_recipient_<id>` | Change who an email goes to |
-| `woocommerce_email_subject_<id>` / `woocommerce_email_heading_<id>` | Change subject / heading |
-| `woocommerce_email_before_order_table` / `woocommerce_email_after_order_table` | Inject content around the order summary |
-| `woocommerce_email_order_meta` | Add rows after the order table |
-| `woocommerce_email_headers` | Add CC/BCC or custom headers |
-| `woocommerce_mail_content` | Filter the final rendered HTML |
-
-<VerifyNote>confirm these hook names and parameters for 11.0.1</VerifyNote>
+| `woocommerce_email_classes` (filter) | Register a custom email |
+| `woocommerce_email_recipient_<id>` (filter, `$recipient, $order, $email`) | Change who an email goes to |
+| `woocommerce_email_subject_<id>` / `woocommerce_email_heading_<id>` (filter) | Change subject / heading |
+| `woocommerce_email_before_order_table` / `woocommerce_email_after_order_table` (action, `$order, $sent_to_admin, $plain_text, $email`) | Inject content around the order summary |
+| `woocommerce_email_order_meta` (action, same params) | Add rows after the order table |
+| `woocommerce_email_headers` (filter, `$header, $id, $order`) | Add CC/BCC or custom headers |
+| `woocommerce_email_attachments` (filter) | Attach files |
+| `woocommerce_mail_content` (filter) | Filter the final rendered HTML |
 
 ## The Block email editor
 
 <VersionNote version="WooCommerce 11.0">
-  WooCommerce 11.0 ships an **experimental block-based email editor** alongside
-  the classic per-email settings. Where enabled, email bodies are edited as
-  blocks rather than by overriding PHP templates. Treat it as unstable and
-  keep template overrides as the supported path for now.
-  <VerifyNote>the feature flag / settings location for the block email editor
-  in 11.0.1</VerifyNote>
+  WooCommerce 11.0 ships an **experimental block-based email editor**, enabled
+  under **WooCommerce → Settings → Advanced → Features** ("Block Email Editor
+  (alpha)"). Once on, each email's row in **Settings → Emails** gets an
+  *Edit* action that opens a block editor for the body instead of the classic
+  template. Treat it as unstable and keep template overrides as the supported
+  path for now.
 </VersionNote>
 
 ## Related

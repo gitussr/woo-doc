@@ -23,9 +23,9 @@ The `product_type` taxonomy term on the product selects a CRUD subclass:
 | `external` | `WC_Product_External` | An "affiliate" product — the add-to-cart button links off-site |
 
 Extensions register more (`subscription`, `bundle`, `booking`, …) by adding a
-`product_type` term and filtering the class map.
-<VerifyNote>the `woocommerce_product_class` filter name/signature and the
-`product_type` → class resolution path in 11.0.1</VerifyNote>
+`product_type` term and hooking `woocommerce_product_class`
+(`$classname, $product_type, $post_type, $product_id`), which
+`WC_Product_Factory` applies when resolving the class for a product.
 
 Get the right object with `wc_get_product( $id )` — it returns the correct
 subclass. Check with `$product->get_type()` or `$product->is_type( 'variable' )`.
@@ -78,9 +78,9 @@ A product carries three stored price fields and one computed one:
 </SafetyLevel>
 
 Whether a sale is "on" also depends on the sale schedule
-(`_sale_price_dates_from` / `_sale_price_dates_to`); WooCommerce runs a
-scheduled task that clears expired sale prices.
-<VerifyNote>the scheduled hook name that expires sale prices in 11.0.1</VerifyNote>
+(`_sale_price_dates_from` / `_sale_price_dates_to`). `wc_scheduled_sales()`
+runs on the **daily** `woocommerce_scheduled_sales` cron event to start and
+end scheduled sales — so a sale ending mid-day is not cleared to the minute.
 
 ## Stock
 
@@ -99,15 +99,16 @@ Stock is tracked at two levels and expressed two ways:
 
 <Lifecycle
   steps={[
-    'Add to cart / checkout — stock is not yet reduced',
-    'Order is placed — a "stock hold" is recorded so concurrent buyers cannot oversell (held for a configurable number of minutes)',
-    'Payment completes (or the order moves to processing/completed) — wc_reduce_stock_levels() decrements _stock and updates status',
-    'Order is cancelled or fully refunded — wc_increase_stock_levels() restores it',
+    'Add to cart / checkout — stock is not reduced',
+    'Order is placed — the ReserveStock helper records a time-limited hold (the "Hold stock (minutes)" setting, option woocommerce_hold_stock_minutes) so concurrent buyers cannot oversell',
+    'Order enters processing / completed / on-hold, or payment_complete() fires — wc_maybe_reduce_stock_levels() decrements _stock and refreshes _stock_status',
+    'Order → cancelled / pending / failed — wc_maybe_increase_stock_levels() restores it',
   ]}
-  caption="Stock is reserved at checkout and only decremented when the order is paid — with a time-limited hold to prevent overselling in between."
+  caption="Stock is held at checkout and only decremented once the order moves toward fulfilment. Both reduce and increase are guarded by an order flag so they run at most once."
 />
 
-<VerifyNote>confirm the reservation mechanism (`ReserveStock` / `wc_reserve_stock_for_order`), the "hold stock (minutes)" option key, and the exact hooks that call `wc_reduce_stock_levels()` in 11.0.1</VerifyNote>
+Stock management overall is gated by the per-product `_manage_stock` and the
+store-wide `woocommerce_manage_stock` option.
 
 <Callout type="info">
   WooCommerce 11.0 enables **product object caching by default for new
@@ -120,13 +121,14 @@ Stock is tracked at two levels and expressed two ways:
 
 | You want to… | Use |
 | --- | --- |
-| Add a product data field | Product data metabox hooks + `woocommerce_process_product_meta`; expose via a `get_`/`set_` on a custom product class or via meta |
-| Add a product type | Register a `product_type` term + a `WC_Product_*` subclass + class-map filter |
-| Change catalog visibility / query | `woocommerce_product_query`, `woocommerce_products_widget_query_args`, the `product_visibility` taxonomy |
+| Add a field to the product editor | Render on `woocommerce_product_options_general_product_data` / `_pricing` / `_inventory_product_data` / `_shipping_product_data` / `_advanced` (or add a tab via `woocommerce_product_data_tabs` + `woocommerce_product_data_panels`); save on `woocommerce_admin_process_product_object` (set on the `$product` object) or `woocommerce_process_product_meta` |
+| Add a product type | Register a `product_type` term + a `WC_Product_*` subclass + `woocommerce_product_class` |
+| Change catalog visibility / query | `woocommerce_product_query`, the `product_visibility` taxonomy |
 | Change purchasability | `woocommerce_is_purchasable`, `woocommerce_variation_is_purchasable` |
-| React to a stock change | `woocommerce_product_set_stock`, `woocommerce_low_stock`, `woocommerce_no_stock` |
+| React to a stock change | `woocommerce_product_set_stock`, `woocommerce_low_stock`, `woocommerce_no_stock`, `woocommerce_product_set_stock_status` |
 
-<VerifyNote>confirm these hook names and add the current product-data-panel action hooks for 11.0.1</VerifyNote>
+The Product Editor beta was **fully removed in WooCommerce 11.0** — the
+classic metabox above is the only product-editor extension surface.
 
 ## Related
 

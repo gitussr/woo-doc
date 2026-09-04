@@ -27,14 +27,18 @@ without it in code (`$order->get_status()` returns `processing`, not
 | `cancelled` | Cancelled by admin or customer | Manual, or unpaid-order cleanup |
 | `refunded` | Fully refunded | A refund covering the whole total |
 | `failed` | Payment failed or was declined | Gateway rejection |
-| `checkout-draft` | Block checkout in progress, not yet placed | The Checkout Block's draft order |
 
-<VerifyNote>confirm the full status list and slugs for 11.0.1, including `checkout-draft`, and any statuses added since (e.g. around the Block checkout)</VerifyNote>
+`wc_get_order_statuses()` returns exactly these seven (each `wc-` prefixed
+internally: `wc-pending`, `wc-processing`, `wc-on-hold`, `wc-completed`,
+`wc-cancelled`, `wc-refunded`, `wc-failed`). There is also an internal
+**`wc-checkout-draft`** status for a Checkout-Block order that has not been
+placed yet — it is registered but excluded from `wc_get_order_statuses()` and
+the admin dropdown.
 
-Register a custom status with `register_post_status()` (legacy) /
-`wc_register_order_status`-style registration plus the
-`wc_order_statuses` filter.
-<VerifyNote>the exact custom-status registration steps and filter names (`wc_order_statuses`, `woocommerce_register_shop_order_post_statuses`) for 11.0.1</VerifyNote>
+To register a custom status, hook **all three**:
+`register_post_status()` for the status itself,
+`woocommerce_register_shop_order_post_statuses` so it works under HPOS, and
+`wc_order_statuses` to add it to the admin dropdown. Prefix the slug `wc-`.
 
 ## The transition hook family
 
@@ -62,14 +66,15 @@ specific one that fits:
 <Lifecycle
   steps={[
     'Order placed (pending) — stock is held, not reduced',
-    'payment_complete() or transition to processing/completed — wc_reduce_stock_levels(), grant downloadable access, send the "processing" email',
-    'Transition to completed — send the "completed" email; for downloads-only orders this can be automatic',
-    'Transition to cancelled or refunded — wc_increase_stock_levels() restores stock',
+    'woocommerce_payment_complete, or a transition into processing / completed / on-hold — wc_maybe_reduce_stock_levels() runs (once, guarded by an order flag); downloadable access is granted; the customer "processing" email sends',
+    'Transition to completed — the "completed" email sends; downloads-only orders can auto-complete',
+    'Transition to cancelled / pending / failed — wc_maybe_increase_stock_levels() restores stock',
   ]}
   caption="Most side effects hang off the transition into processing or completed — not off order creation."
 />
 
-<VerifyNote>confirm which hook(s) call `wc_reduce_stock_levels()` and `wc_maybe_increase_stock_levels()` in 11.0.1, and the option that controls automatic stock reduction</VerifyNote>
+Stock reduction is also gated by the store-wide `woocommerce_manage_stock`
+option and each product's `_manage_stock`.
 
 ## Order items
 
@@ -97,16 +102,21 @@ $refund = wc_create_refund( array(
     'amount'         => 20.00,
     'reason'         => 'Damaged in transit',
     'line_items'     => array( /* item_id => array( qty, refund_total, refund_tax ) */ ),
+    'refund_payment' => true,  // ask the gateway to move the money
     'restock_items'  => true,
 ) );
 ```
 
-- A refund covering the full total moves the order to `refunded`.
-- `woocommerce_order_refunded` and `woocommerce_refund_created` fire.
-- Whether money actually moves depends on the gateway supporting
-  `refunds` — otherwise the refund is recorded but must be issued manually.
+The full argument set is `amount`, `reason`, `order_id`, `refund_id`,
+`line_items`, `refund_payment`, `restock_items`. During the call
+`woocommerce_create_refund` fires (adjust the refund before save), then
+`woocommerce_refund_created`, `woocommerce_order_refunded`, and one of
+`woocommerce_order_partially_refunded` / `woocommerce_order_fully_refunded`.
 
-<VerifyNote>confirm `wc_create_refund` argument keys and the refund hook names for 11.0.1</VerifyNote>
+- A refund covering the full total moves the order to `refunded`.
+- `refund_payment => true` only works when the gateway declares
+  `supports( 'refunds' )` — otherwise the refund is recorded but the money
+  must be moved manually in the processor.
 
 ## Order notes
 

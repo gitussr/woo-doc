@@ -26,20 +26,25 @@ Each **cart item** is an array. The important keys:
 
 | Key | Holds |
 | --- | --- |
+| `key` | The cart item key — also the array key |
 | `product_id`, `variation_id`, `variation` | What was added |
 | `quantity` | How many |
 | `data` | A live `WC_Product` object for this line — this is what pricing reads |
-| `line_subtotal`, `line_total`, `line_tax`, `line_subtotal_tax` | Filled in by the totals pipeline |
-| `key` | The cart item key (the array key) |
+| `data_hash` | A hash of the product data, so a price change invalidates a stale session line |
+| `line_subtotal`, `line_subtotal_tax`, `line_total`, `line_tax`, `line_tax_data` | Filled in by the totals pipeline, not by `add_to_cart()` |
 
-<VerifyNote>confirm the full documented cart-item key list and how the cart item key hash is generated (`woocommerce_cart_id`) in 11.0.1</VerifyNote>
+The **cart item key** is `md5()` of the product id, variation id, variation
+data, and any extra cart-item data, via `WC_Cart::generate_cart_id()` —
+filterable with `woocommerce_cart_id`. Adding the same product with different
+custom data (an engraving, a gift note) produces a different key and a
+separate line.
 
 ## The totals calculation pipeline
 
-`WC()->cart->calculate_totals()` runs a **fixed sequence**. Since WooCommerce
-3.2 the arithmetic lives in a dedicated totals class.
-<VerifyNote>confirm the class name (`WC_Cart_Totals`) and entry point for
-11.0.1</VerifyNote>
+`WC()->cart->calculate_totals()` runs a **fixed sequence**. It fires
+`woocommerce_before_calculate_totals`, hands the cart to a `WC_Cart_Totals`
+instance (the dedicated arithmetic class since WooCommerce 3.2), then fires
+`woocommerce_after_calculate_totals`.
 
 <Lifecycle
   steps={[
