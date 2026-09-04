@@ -1,0 +1,223 @@
+---
+title: WordPress Fundamentals
+description: The WordPress mechanisms WooCommerce is built on — the request lifecycle, post types, metadata, options, the hook system, cron, and the REST API — framed by how WooCommerce uses each one.
+---
+
+<PageMeta priority="P0" audience="Beginner → Intermediate" />
+
+WooCommerce is a WordPress plugin. Every capability it has is either a
+WordPress mechanism it reuses or a mechanism it adds *in the shape WordPress
+expects*. If you understand these seven WordPress subsystems, most of
+WooCommerce's structure stops being surprising.
+
+This page is a WooCommerce-oriented refresher, not a full WordPress course.
+Each section says what the mechanism is, then **how WooCommerce leans on it**.
+
+## The request lifecycle
+
+Every front-end WooCommerce page is a normal WordPress request. Nothing about
+a cart or a checkout changes the boot sequence — WooCommerce just registers
+callbacks at specific points in it.
+
+<Lifecycle
+  steps={[
+    'Web server routes the request to index.php',
+    'wp-load.php → wp-settings.php boots WordPress',
+    'Must-use plugins, then active plugins load — WooCommerce included',
+    'plugins_loaded fires — WooCommerce finishes initializing here',
+    'Theme loads: after_setup_theme',
+    'init fires — post types, taxonomies, shortcodes, sessions, REST routes register',
+    'wp_loaded fires — everything is registered',
+    'Request is parsed to a query; the main query runs',
+    'template_redirect fires — last chance to intercept before output',
+    'A template is chosen and rendered; hooks inside it fire during output',
+  ]}
+  caption="The WordPress request lifecycle. WooCommerce attaches to plugins_loaded, init, wp_loaded, and template_redirect — not to a lifecycle of its own."
+/>
+
+<WhereFrom
+  looking={<>A WooCommerce hook that "doesn't fire".</>}
+  origin={<>A callback added too late — after the action it targets already ran — or on a request type (admin, REST, cron) where that action never fires.</>}
+  controls={<>Which WordPress lifecycle event your <code>add_action</code> is itself attached to, and its priority.</>}
+  safe={<>Register on <code>init</code> or later for most storefront work; use <code>plugins_loaded</code> only for things that must exist before <code>init</code>.</>}
+  avoid={<>Calling WooCommerce functions (<code>WC()</code>, <code>wc_get_product()</code>) at file load time, before WooCommerce has initialized.</>}
+/>
+
+<VerifyNote>exact ordering and firing conditions of `plugins_loaded` / `init` / `wp_loaded` / `template_redirect` in WordPress 7.1, and the hook WooCommerce uses to complete its own init</VerifyNote>
+
+<VersionNote version="WordPress 7.1 · WooCommerce 11.0.1">
+  The hook *names* above are long-standing WordPress API and stable across
+  versions. The exact point at which WooCommerce completes its bootstrap is an
+  implementation detail — see [WooCommerce Architecture](/docs/foundations/woocommerce-architecture).
+</VersionNote>
+
+## Post types
+
+WordPress stores most editable content as rows in one table (`wp_posts`),
+distinguished by a `post_type` column. `post` and `page` are built in;
+plugins register their own with `register_post_type()`.
+
+WooCommerce registers several custom post types:
+
+| Post type | Represents | Notes |
+| --- | --- | --- |
+| `product` | A catalog product | Public, has archives, uses custom taxonomies |
+| `product_variation` | One variation of a variable product | Child of a `product`, not shown in the admin list |
+| `shop_coupon` | A coupon | Admin-only |
+| `shop_order` | An order (legacy storage) | Superseded by HPOS tables — see below |
+| `shop_order_refund` | A refund against an order | Child of an order |
+
+<VerifyNote>the full list of post types WooCommerce registers in 11.0.1 and their exact registration arguments (public, hierarchical, capabilities)</VerifyNote>
+
+<Callout type="warn">
+  **Orders are the exception.** With High-Performance Order Storage (HPOS)
+  enabled, orders and refunds are stored in dedicated tables, not as
+  `shop_order` posts. Treating an order as "just a post" is the single most
+  common outdated assumption in older WooCommerce tutorials. See the HPOS
+  section *(planned)* and
+  [WooCommerce Data Model](/docs/foundations/woocommerce-data-model).
+</Callout>
+
+## Metadata
+
+Alongside each post, WordPress keeps arbitrary key/value pairs in
+`wp_postmeta` (`post_id`, `meta_key`, `meta_value`), read with
+`get_post_meta()`. It is schemaless and flexible, and expensive to query at
+scale because `meta_value` is a long text column with no useful index.
+
+How WooCommerce uses it:
+
+- **Product data** — historically almost every product field (`_price`,
+  `_stock`, `_sku`, `_weight`, …) is post meta. <VerifyNote>current underscore-prefixed meta keys for core product fields in 11.0.1</VerifyNote>
+- **Lookup tables** — because meta queries are slow, WooCommerce maintains
+  flattened copies of hot fields (for example a product meta lookup table)
+  that the catalog queries hit instead of `wp_postmeta`. <VerifyNote>name and columns of the product meta lookup table</VerifyNote>
+- **CRUD abstraction** — you are encouraged to read product and order data
+  through `WC_Product` / `WC_Order` getter methods, not `get_post_meta()`
+  directly, so that HPOS and lookup tables stay correct. This is covered in
+  [WooCommerce Data Model](/docs/foundations/woocommerce-data-model).
+
+<SafetyLevel level="risky">
+  Reading WooCommerce data with <code>get_post_meta()</code> works today for
+  products but bypasses the data-store layer. For orders under HPOS it can
+  return stale data or nothing. Prefer the CRUD getters.
+</SafetyLevel>
+
+## Options
+
+`wp_options` holds site-wide settings as key/value rows, read with
+`get_option()`. Rows flagged `autoload = yes` are **all loaded on every
+request** into memory. A bloated autoload set is a classic WordPress
+performance problem.
+
+WooCommerce uses options for essentially all store configuration — pages,
+currency, tax behavior, checkout options, email settings, gateway settings —
+generally under a `woocommerce_` key prefix. <VerifyNote>which WooCommerce
+option keys are autoloaded in 11.0.1 and their typical total size</VerifyNote>
+
+<Callout type="info">
+  When the Performance section *(planned)* is written, autoloaded option
+  weight from WooCommerce and its extensions gets its own treatment —
+  it is one of the highest-leverage things to audit on a slow store.
+</Callout>
+
+## Hooks: actions and filters
+
+The hook system is how WordPress code is changed without editing it. Two
+kinds:
+
+<LayerStack
+  layers={[
+    { name: 'Action', note: 'a named moment — "do something now". Callbacks run for side effects; return values are ignored. add_action() / do_action().' },
+    { name: 'Filter', note: 'a named value passing through — "transform this and return it". The callback must return a value. add_filter() / apply_filters().' },
+  ]}
+/>
+
+Both share the same mechanics: callbacks register with a **priority** (lower
+runs earlier, default 10) and a declared number of **accepted arguments**.
+WooCommerce exposes hundreds of each. The distinction matters:
+
+- Want to *add markup* next to the price? An **action** at that position.
+- Want to *change the price value*? A **filter** on the value.
+
+Putting display logic in a value filter, or trying to change a value from an
+action, is a frequent source of "my code runs but nothing changes".
+
+<VersionNote version="WooCommerce 11.0.1">
+  Hook *names* are the most version-sensitive API surface in WooCommerce.
+  WooDoc tags every specific hook name with <VerifyNote /> until it is checked
+  against core source for this release. The Development section *(planned)*
+  documents hook discovery and debugging in depth.
+</VersionNote>
+
+## Cron and scheduled work
+
+WordPress has "cron" (`wp_schedule_event()`, the `wp_cron` option) that runs
+due tasks on regular page loads — not a real system cron unless wired to one.
+It is fine for light, non-urgent work and unreliable for anything precise or
+high-volume.
+
+WooCommerce bundles **Action Scheduler**, a more robust queue built on top of
+WordPress that stores jobs in its own tables, processes them in batches, and
+retries failures. WooCommerce and many extensions use it for things like
+delayed emails, subscription renewals, webhook delivery, and data migrations
+(including the HPOS backfill).
+
+<VerifyNote>Action Scheduler table names, the hook it processes on, and which core WooCommerce jobs use it in 11.0.1</VerifyNote>
+
+<SafetyLevel level="recommended">
+  For your own deferred work in a WooCommerce context, schedule it through
+  Action Scheduler rather than raw <code>wp_schedule_single_event()</code> —
+  you get batching, retries, and an admin view of the queue.
+</SafetyLevel>
+
+## The REST API
+
+WordPress ships a REST API under `/wp-json/`. WooCommerce adds two distinct
+API surfaces on top:
+
+| API | Base route | Purpose | Auth |
+| --- | --- | --- | --- |
+| WooCommerce REST API | `/wp-json/wc/v3/` | Server-to-server: products, orders, customers, reports | API keys (consumer key/secret) or WP auth |
+| Store API | `/wp-json/wc/store/v1/` | Front-end: cart, checkout, product browsing for Blocks and headless | Nonce / cart token; designed for the browser |
+
+<VerifyNote>current version segments (`wc/v3`, `wc/store/v1`) and the full resource list for each in 11.0.1</VerifyNote>
+
+The two are not interchangeable. The REST API is an admin/integration tool
+with full CRUD on stored records. The Store API is a customer-facing surface
+that manages a *session cart* and drives the Cart and Checkout Blocks. Both
+get their own pages in later phases (Development section, *planned*).
+
+## How this maps forward
+
+<LayerStack
+  layers={[
+    { name: 'Request lifecycle', note: '→ when your WooCommerce code is allowed to run' },
+    { name: 'Post types + meta', note: '→ how products (and legacy orders) are stored' },
+    { name: 'Options', note: '→ where every store setting lives' },
+    { name: 'Hooks', note: '→ the entire extension model — next page but one' },
+    { name: 'Cron / Action Scheduler', note: '→ background order, email, and webhook work' },
+    { name: 'REST + Store API', note: '→ integrations and the headless / Blocks front-end' },
+  ]}
+  caption="Each WordPress fundamental is the base of a WooCommerce subsystem documented later."
+/>
+
+## Related
+
+<Cards>
+  <Card
+    title="WooCommerce Architecture"
+    href="/docs/foundations/woocommerce-architecture"
+    description="How WooCommerce boots on top of this lifecycle and organizes itself in memory."
+  />
+  <Card
+    title="WooCommerce Data Model"
+    href="/docs/foundations/woocommerce-data-model"
+    description="What WooCommerce stores, in which tables, and how to read it correctly."
+  />
+  <Card
+    title="Why WooCommerce?"
+    href="/docs/introduction/why-woocommerce"
+    description="What WooCommerce adds to the WordPress base described here."
+  />
+</Cards>

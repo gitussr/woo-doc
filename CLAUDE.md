@@ -56,5 +56,9 @@ source of truth for scope and sequencing.
 
 ## Next likely task
 
-Phase 2 (Foundations) — see roadmap. Also: resolve existing `VerifyNote` tags
-in the Introduction pages.
+Phase 2 (Foundations) content is drafted: `content/docs/foundations/` has
+`wordpress-fundamentals`, `woocommerce-architecture`, `woocommerce-data-model`,
+`extension-model`. Remaining for Phase 2: the **accuracy pass** — resolve the
+`VerifyNote` tags those four pages introduced *and* the older ones in the
+Introduction pages, checked against WooCommerce 11.0.1 core source / official
+docs. Then Phase 3 (Development toolkit) — see roadmap.

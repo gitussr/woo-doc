@@ -1,0 +1,9 @@
+{
+  "title": "Foundations",
+  "pages": [
+    "wordpress-fundamentals",
+    "woocommerce-architecture",
+    "woocommerce-data-model",
+    "extension-model"
+  ]
+}

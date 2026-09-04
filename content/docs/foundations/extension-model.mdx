@@ -1,0 +1,204 @@
+---
+title: WooCommerce Extension Model
+description: The four ways WooCommerce lets you change its behavior — hooks, filters, template overrides, and blocks — what each one can and cannot do, how they compose, and how to choose between them.
+---
+
+<PageMeta priority="P0" audience="Intermediate → Advanced" />
+
+WooCommerce is built to be changed without editing it. There are four
+mechanisms for that, and they are not alternatives to pick from at random —
+each operates at a different layer, and real customizations often use two or
+three together. This page is the map of the system; the Development section
+*(planned)* documents each mechanism in depth.
+
+## The four mechanisms
+
+<LayerStack
+  layers={[
+    { name: 'Actions (hooks)', note: 'Run code at a named moment. Add markup, trigger side effects, register things. Cannot change a value that has already been computed.' },
+    { name: 'Filters', note: 'Transform a value as it passes a named point. Change a price, a label, an array of fields, a query. Must return the value.' },
+    { name: 'Template overrides', note: 'Replace a classic PHP template file with your own copy in the theme. Full control of markup for that fragment; you now own the copy.' },
+    { name: 'Blocks (Cart/Checkout Blocks)', note: 'Extend the React storefront via block settings, Slot/Fill, and integration interfaces backed by the Store API.' },
+  ]}
+  caption="Ordered roughly from safest / most surgical to most invasive / most powerful."
+/>
+
+## Actions — change *what happens*
+
+An action is a point in execution where WooCommerce calls
+`do_action( 'some_hook', $context… )`. Your callback runs there for effect;
+its return value is discarded.
+
+- **Good for:** outputting extra markup at a known position, sending a
+  notification, writing a log row, creating related data when an order
+  completes, enqueueing a script on WooCommerce pages.
+- **Cannot:** change a value WooCommerce already calculated. If the price is
+  wrong, an action fired after pricing cannot fix it.
+
+<VerifyNote>representative core action names for storefront positions (e.g. around the add-to-cart button, checkout fields, order-received) in 11.0.1</VerifyNote>
+
+## Filters — change *a value*
+
+A filter is `apply_filters( 'some_filter', $value, $context… )`. Your callback
+receives `$value`, returns a (possibly modified) version, and WooCommerce uses
+what you return.
+
+- **Good for:** adjusting a price, relabelling a button, adding/removing
+  checkout fields, altering a product query, changing an email recipient,
+  toggling whether a gateway is available.
+- **Must:** always return a value — returning nothing sets it to `null` and
+  breaks everything downstream.
+
+<SafetyLevel level="recommended">
+  For a value change, a filter is almost always the correct mechanism and the
+  highest-safety one. It survives updates and touches nothing else.
+</SafetyLevel>
+
+<VerifyNote>representative core filter names for common value changes (catalog price, cart item price, checkout fields, gateway availability) in 11.0.1</VerifyNote>
+
+### Actions vs filters — the test
+
+<DecisionGuide>
+  <Choice when="you want something to appear or happen">
+    Action. Hook the position, echo or do your thing.
+  </Choice>
+  <Choice when="you want an existing value to be different">
+    Filter. Hook the value, return the new one.
+  </Choice>
+  <Choice when="your action echoes markup to 'fix' a wrong number">
+    Stop — you are patching a symptom. Find the filter on the value.
+  </Choice>
+</DecisionGuide>
+
+## Template overrides — change *classic markup*
+
+WooCommerce renders classic storefront fragments from PHP files in its
+`templates/` directory, loaded through a resolver that checks your **theme**
+first. Copy a template to `your-theme/woocommerce/<same-path>` and your copy
+wins.
+
+<Lifecycle
+  steps={[
+    'WooCommerce calls its template loader for e.g. cart/cart-totals.php',
+    'The loader looks in your child theme, then parent theme, then WooCommerce',
+    'First match wins — your themed copy is used if present',
+    'The template runs with a defined set of variables in scope',
+    'Action hooks inside the template still fire — from your copy too, if you keep them',
+  ]}
+  caption="The classic template override mechanism. It is a theme feature, resolved at render time."
+/>
+
+<SafetyLevel level="risky">
+  A template override is a **maintained fork of one file**. When WooCommerce
+  changes that template in an update, your copy does not get the change — and
+  can silently drop new markup, hooks, or accessibility fixes. WooCommerce's
+  system report flags overridden templates that are out of date. Use only when
+  no hook or filter reaches what you need.
+</SafetyLevel>
+
+<VerifyNote>the template resolver function names (`wc_get_template`, `wc_locate_template`?), the theme sub-directory (`woocommerce/`), and the outdated-template version-check mechanism for 11.0.1</VerifyNote>
+
+<Callout type="warn">
+  Template overrides only affect the **classic** front-end. They do nothing to
+  the Cart and Checkout **Blocks** — a template override of `checkout/*.php`
+  has no effect on a store using the Checkout Block.
+</Callout>
+
+## Blocks — change *the React storefront*
+
+The Cart and Checkout Blocks render on the client and get their data from the
+[Store API](/docs/foundations/wordpress-fundamentals#the-rest-api). They are
+not extended with PHP template hooks. Instead:
+
+<LayerStack
+  layers={[
+    { name: 'Block settings', note: 'Editor-side options on each block — the no-code surface.' },
+    { name: 'Slot / Fill', note: 'Named regions in the checkout UI where an extension can render its own React components.' },
+    { name: 'Integration interface', note: 'A registration API for adding a block-aware integration: scripts, data, and server-side wiring for checkout.' },
+    { name: 'Store API extensibility', note: 'Attach custom data to cart/checkout responses and receive custom data back on order submission.' },
+  ]}
+  caption="The Blocks extension surface. Conceptually parallel to hooks + templates, but implemented in JS + a data API."
+/>
+
+<VerifyNote>the current Blocks extensibility API names — Slot/Fill region names, the checkout integration registration function, and the Store API extend mechanism (`ExtendSchema` / `woocommerce_store_api_register_endpoint_data`?) for 11.0.1</VerifyNote>
+
+<ClassicVsBlocks
+  classic="Customize with actions, filters, and template overrides. Mature, heavily documented, most tutorials target it."
+  blocks="Customize with block settings, Slot/Fill, integration interfaces, and Store API data. Newer, JS-centric; some classic checkout actions do not fire here."
+/>
+
+## How they compose
+
+Real customizations layer the mechanisms. A worked shape — adding a gift-wrap
+option to checkout:
+
+<Lifecycle
+  steps={[
+    'Filter: add a "gift wrap" field to the checkout field list (classic) / render it in a Slot (Blocks)',
+    'Filter: add a fee to the cart totals when the option is set',
+    'Action: on order creation, save the choice as order meta',
+    'Action: in the admin order screen and the customer email, display the saved choice',
+    'Template override or Blocks Slot: only if the fee row needs custom presentation a filter cannot give',
+  ]}
+  caption="Five hook points across two mechanisms for one feature. This is normal — and none of it edits WooCommerce."
+/>
+
+## Choosing a mechanism
+
+<DecisionGuide>
+  <Choice when="a filter exists for the value you want to change">
+    Use it. Done. Highest safety, zero maintenance.
+  </Choice>
+  <Choice when="you need to add output at a known position">
+    Use the action at that position.
+  </Choice>
+  <Choice when="no hook reaches the markup and the store is classic">
+    Override the template. Record it; re-check on every WooCommerce update.
+  </Choice>
+  <Choice when="the store uses Cart/Checkout Blocks">
+    Use block settings, then Slot/Fill, then the integration interface. Do not
+    reach for PHP template overrides.
+  </Choice>
+  <Choice when="only editing a core file would work">
+    Stop. Re-scope the requirement, request an upstream hook, or build a proper
+    extension around the constraint.
+  </Choice>
+</DecisionGuide>
+
+## Where each mechanism's code belongs
+
+<LayerStack
+  layers={[
+    { name: 'Plugin / mu-plugin', note: 'All actions and filters. Portable, testable, survives theme switches. First choice.' },
+    { name: 'Child theme functions.php', note: 'Acceptable for presentation-only hooks tied to that theme. Not for commerce logic.' },
+    { name: 'Child theme woocommerce/ folder', note: 'The only place classic template overrides can live.' },
+    { name: 'A block/checkout integration plugin', note: 'Blocks extensibility ships as a plugin with a JS build step.' },
+  ]}
+/>
+
+<VersionNote version="WooCommerce 11.0.1">
+  Mechanism *concepts* here are stable. Every specific hook name, template
+  path, resolver function, and Blocks API on this page is tagged
+  <VerifyNote /> until checked against core source for this release — the
+  Phase 3 accuracy pass clears them.
+</VersionNote>
+
+## Related
+
+<Cards>
+  <Card
+    title="WooCommerce Architecture"
+    href="/docs/foundations/woocommerce-architecture"
+    description="The shared core that all four mechanisms hook into."
+  />
+  <Card
+    title="Where Does This Come From?"
+    href="/docs/introduction/where-does-this-come-from"
+    description="The pattern for finding which mechanism owns the thing you want to change."
+  />
+  <Card
+    title="Documentation Design System"
+    href="/docs/about/design-system"
+    description="The SafetyLevel framework these choices are labelled with."
+  />
+</Cards>

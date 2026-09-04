@@ -1,0 +1,175 @@
+---
+title: WooCommerce Data Model
+description: The core entities WooCommerce manages — products and variations, orders and order items, customers, coupons — what each one is, how they relate, and which storage each lives in across classic and HPOS.
+---
+
+<PageMeta priority="P0" audience="Intermediate → Advanced" />
+
+WooCommerce's data model is a commerce domain expressed in WordPress's
+storage. Some entities are custom post types; some are custom tables; order
+storage is currently mid-migration between the two. This page is the map.
+
+Read [WooCommerce Architecture](/docs/foundations/woocommerce-architecture#the-data-layer-crud-classes-and-data-stores)
+first if you have not — the CRUD-class-over-data-store pattern is what makes
+this model workable.
+
+## The entities at a glance
+
+<LayerStack
+  layers={[
+    { name: 'Product', note: 'WC_Product (+ subclasses). A sellable item. Custom post type product.' },
+    { name: 'Product variation', note: 'WC_Product_Variation. A specific combination of a variable product\'s attributes. Post type product_variation, child of a product.' },
+    { name: 'Order', note: 'WC_Order. A completed (or in-progress) purchase with a status and history. Classic: post type shop_order. HPOS: dedicated tables.' },
+    { name: 'Order item', note: 'WC_Order_Item_* (product, shipping, fee, coupon, tax). The line entries of an order. Always in dedicated tables.' },
+    { name: 'Refund', note: 'WC_Order_Refund. A negative order against a parent order.' },
+    { name: 'Customer', note: 'WC_Customer. A WordPress user with the customer role, or a guest identified only by session/order.' },
+    { name: 'Coupon', note: 'WC_Coupon. A discount rule. Custom post type shop_coupon.' },
+  ]}
+  caption="The core WooCommerce entities and the CRUD class that represents each."
+/>
+
+<VerifyNote>the exact CRUD class names, subclass hierarchy, and post-type slugs for each entity in 11.0.1</VerifyNote>
+
+## Products
+
+A product is the most WordPress-shaped entity: a `product` post plus a lot of
+meta plus taxonomy terms.
+
+<LayerStack
+  layers={[
+    { name: 'wp_posts (type product)', note: 'title, description (post_content), short description (post_excerpt), status, slug' },
+    { name: 'wp_postmeta', note: 'price, SKU, stock, weight, dimensions, tax class, and most other fields — as underscore-prefixed keys' },
+    { name: 'Product meta lookup table', note: 'a flattened copy of hot fields (price, stock status, rating) that catalog queries use instead of postmeta' },
+    { name: 'Taxonomies', note: 'product_cat, product_tag, and one taxonomy per global attribute (pa_color, pa_size, …)' },
+    { name: 'wp_posts (type product_variation)', note: 'one child post per variation of a variable product, each with its own price/stock meta' },
+  ]}
+/>
+
+Product **types** are represented by CRUD subclasses selected from a taxonomy
+term (`product_type`): simple, variable, grouped, external/affiliate, plus
+whatever extensions add (subscription, bundle, …).
+
+<VerifyNote>the `product_type` taxonomy mechanism, the built-in type list, the core product meta keys, and the product meta lookup table name/columns for 11.0.1</VerifyNote>
+
+<SafetyLevel level="recommended">
+  <code>$product = wc_get_product( $id );</code> then
+  <code>$product-&gt;get_price()</code>, <code>-&gt;get_stock_quantity()</code>,
+  <code>-&gt;is_in_stock()</code>. The getters read from the right place
+  (lookup table, meta, or computed) — raw meta reads do not.
+</SafetyLevel>
+
+## Orders and order items
+
+An order is a container; the money and the goods live in its **items**. Even
+under classic storage, order items were never post meta — they have always
+been in dedicated tables.
+
+<LayerStack
+  layers={[
+    { name: 'Order record', note: 'status, currency, customer ID, totals, dates, billing/shipping address. Classic: shop_order post + postmeta. HPOS: wc_orders + wc_order_addresses + wc_order_operational_data + wc_orders_meta.' },
+    { name: 'Order items table', note: 'one row per line — a product line, a shipping line, a fee, a coupon, a tax line. Each row has a type.' },
+    { name: 'Order item meta table', note: 'per-item detail: which product/variation, quantity, line subtotal/total, tax amounts, chosen variation attributes.' },
+  ]}
+  caption="Order storage. The item and item-meta tables are shared between classic and HPOS; only the order record itself moves."
+/>
+
+<VerifyNote>the HPOS table names (`wc_orders`, `wc_orders_meta`, `wc_order_addresses`, `wc_order_operational_data`?), the order items tables (`wp_woocommerce_order_items`, `wp_woocommerce_order_itemmeta`?), and the item `order_item_type` values for 11.0.1</VerifyNote>
+
+### Classic vs HPOS storage
+
+<ClassicVsBlocks
+  classic="Order = a shop_order post in wp_posts; its fields are rows in wp_postmeta. Queryable with WP_Query and get_posts(). This was the default for years."
+  blocks="HPOS: order = rows in purpose-built wc_order* tables with real columns and indexes. Queried with wc_get_orders() / the orders data store. Much faster for large order volumes."
+/>
+
+<Callout type="warn">
+  A store can run in **HPOS mode**, **legacy posts mode**, or a
+  **compatibility (sync) mode** that writes both. Code that must work
+  everywhere reads and writes only through `wc_get_order()` / `WC_Order` and
+  queries only through `wc_get_orders()` — never `WP_Query` for orders, never
+  direct SQL against a hard-coded table. HPOS gets its own section in a later
+  phase.
+</Callout>
+
+<VerifyNote>the exact names of the three HPOS modes and the current default for new installs in 11.0.1</VerifyNote>
+
+## Customers
+
+"Customer" is two things wearing one CRUD class:
+
+<DecisionGuide>
+  <Choice when="the buyer has an account">
+    A WordPress user (role `customer`), plus WooCommerce meta for
+    billing/shipping address, and a lookup-table row for reporting. Order
+    history is every order with their user ID.
+  </Choice>
+  <Choice when="the buyer checked out as a guest">
+    No user row. The customer exists only as the address data stored *on the
+    order*, plus a transient `WC_Customer` built from the session during
+    checkout. Matched to future orders only by email, heuristically.
+  </Choice>
+</DecisionGuide>
+
+<VerifyNote>the customer lookup table name, the `customer` role capabilities, and how guest customers appear in Analytics for 11.0.1</VerifyNote>
+
+## Coupons
+
+A coupon is a `shop_coupon` post whose meta holds the rule: discount type
+(percentage, fixed cart, fixed product), amount, usage limits, product/
+category restrictions, expiry, minimum/maximum spend. `WC_Coupon` reads it;
+the cart totals pipeline applies it.
+
+<VerifyNote>the coupon meta keys and discount-type slugs for 11.0.1</VerifyNote>
+
+## How the entities relate
+
+<Lifecycle
+  steps={[
+    'Customer adds Products (and Variations) to the cart — cart lives in the session, not the database',
+    'A Coupon may be applied to the cart — still session-only',
+    'At checkout, an Order is created from the cart',
+    'Cart contents become Order Items; the customer\'s address is copied onto the Order',
+    'Payment updates the Order status; stock is reduced against the Products',
+    'A Refund may later be created as a negative child Order',
+  ]}
+  caption="The cart is ephemeral session state; the order is the durable record. The copy from cart to order is one of the most important events in WooCommerce."
+/>
+
+<Callout type="info">
+  Note what is **not** a database entity: the cart. It is session data
+  (see [Architecture → Sessions](/docs/foundations/woocommerce-architecture#sessions)).
+  Its full structure and the totals pipeline are documented in the Cart
+  section in a later phase.
+</Callout>
+
+## Reading the model correctly — summary
+
+<LayerStack
+  layers={[
+    { name: 'Products', note: 'wc_get_product() → getters. Never assume a meta key.' },
+    { name: 'Orders', note: 'wc_get_order() / wc_get_orders(). Never WP_Query, never a hard-coded table.' },
+    { name: 'Customers', note: 'new WC_Customer( $user_id ). Remember guests have no user row.' },
+    { name: 'Coupons', note: 'new WC_Coupon( $code ). Rules are in meta; application is the cart\'s job.' },
+    { name: 'Order items', note: 'iterate $order->get_items( $type ). Item meta via the item object.' },
+  ]}
+/>
+
+## Related
+
+<Cards>
+  <Card
+    title="WooCommerce Architecture"
+    href="/docs/foundations/woocommerce-architecture"
+    description="The CRUD / data-store layer that abstracts all of this storage."
+  />
+  <Card
+    title="WordPress Fundamentals"
+    href="/docs/foundations/wordpress-fundamentals"
+    description="Post types, meta, and options — the primitives this model is built from."
+  />
+  <Card
+    title="Developer Mental Model"
+    href="/docs/introduction/developer-mental-model"
+    description="Why a change to one entity ripples across the others."
+  />
+</Cards>

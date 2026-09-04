@@ -1,0 +1,175 @@
+---
+title: WooCommerce Architecture
+description: How WooCommerce boots inside a WordPress request, the WC() singleton and the objects it holds, the data-store and CRUD layer, and how the cart and session are assembled per visitor.
+---
+
+<PageMeta priority="P0" audience="Intermediate → Advanced" />
+
+WooCommerce is a large plugin with a deliberate internal shape. Once you can
+name its main runtime objects and how they are wired together, reading core
+source — and predicting where your own code should hook — gets much easier.
+
+This page is the architectural overview. Individual subsystems (cart totals,
+checkout, orders, payments) get their own [Architecture](/docs/about/design-system)
+pages in later phases.
+
+## Bootstrap: from plugin file to `WC()`
+
+WooCommerce loads like any plugin — its main file runs during the "active
+plugins load" step of the [WordPress request lifecycle](/docs/foundations/wordpress-fundamentals#the-request-lifecycle).
+From there it follows a defined sequence:
+
+<Lifecycle
+  steps={[
+    'Main plugin file runs — defines constants, requires the core class',
+    'The main WooCommerce class is instantiated as a singleton',
+    'Includes are loaded: functions, abstract classes, data stores, integrations',
+    'Hooks are registered — including WooCommerce\'s own lifecycle actions',
+    'On plugins_loaded: WooCommerce signals it is loaded',
+    'On init: post types, taxonomies, the session, shortcodes, Store API routes register',
+    'The request proceeds as a normal WordPress request, now WooCommerce-aware',
+  ]}
+  caption="WooCommerce bootstrap. Your integration code normally waits until at least the init step."
+/>
+
+WooCommerce fires its own actions during this sequence so extensions can hook
+the right moment:
+
+| Hook | Fires | Use it for |
+| --- | --- | --- |
+| `before_woocommerce_init` | Very early, before WooCommerce initializes | Declaring compatibility (e.g. HPOS, Blocks) |
+| `woocommerce_loaded` | After WooCommerce's includes are loaded | Code that needs WooCommerce classes to exist |
+| `woocommerce_init` | WooCommerce has finished initializing | Most integration setup |
+| `init` (WordPress) | After WooCommerce registers its post types | Anything that depends on the `product` post type or taxonomies |
+
+<VerifyNote>exact names, order, and firing conditions of WooCommerce's bootstrap actions (`before_woocommerce_init`, `woocommerce_loaded`, `woocommerce_init`) in 11.0.1</VerifyNote>
+
+<SafetyLevel level="recommended">
+  Declare feature compatibility (HPOS, Cart/Checkout Blocks) from a callback on
+  <code>before_woocommerce_init</code> using WooCommerce's feature-compatibility
+  API. Doing it later has no effect. <VerifyNote>the
+  <code>FeaturesUtil::declare_compatibility()</code> call shape for 11.0.1</VerifyNote>
+</SafetyLevel>
+
+## The `WC()` singleton
+
+`WC()` is a global accessor that returns the one WooCommerce instance. It is
+the entry point to the main runtime objects:
+
+<LayerStack
+  layers={[
+    { name: 'WC()->cart', note: 'the current visitor\'s cart — items, totals, coupons. Populated on the front end, not in admin/REST by default.' },
+    { name: 'WC()->session', note: 'the session handler — per-visitor key/value store backing the cart and checkout' },
+    { name: 'WC()->customer', note: 'the current customer object — billing/shipping address, tax location, logged-in or guest' },
+    { name: 'WC()->checkout()', note: 'the checkout controller — field definitions, validation, order creation' },
+    { name: 'WC()->query', note: 'front-end query manipulation for shop/product pages' },
+    { name: 'WC()->mailer()', note: 'the transactional email system' },
+    { name: 'WC()->payment_gateways()', note: 'the registry of available payment gateways' },
+    { name: 'WC()->shipping()', note: 'the shipping method / zone registry and package calculation' },
+  ]}
+  caption="The objects hanging off WC(). Most 'where does this behavior live?' questions start by identifying which of these owns it."
+/>
+
+<VerifyNote>the exact set of public properties and accessor methods on the `WooCommerce` class in 11.0.1, and which are only initialized on front-end requests</VerifyNote>
+
+<Callout type="warn">
+  `WC()->cart` and `WC()->session` are **context-sensitive**. On admin, cron,
+  and many REST requests they may be `null` or empty because there is no
+  visitor session. Code that assumes a cart always exists breaks when it runs
+  in the wrong context.
+</Callout>
+
+## The data layer: CRUD classes and data stores
+
+Since WooCommerce 3.0, stored entities are accessed through a two-part
+pattern that deliberately hides *where* the data physically lives:
+
+<LayerStack
+  layers={[
+    { name: 'CRUD class', note: 'WC_Product, WC_Order, WC_Customer, WC_Coupon — an in-memory object with typed getters/setters and a save() method. This is the API you use.' },
+    { name: 'Data store', note: 'A swappable class that knows how to read/write that entity to its actual storage (post + meta, custom tables, HPOS). Selected at runtime; replaceable via a filter.' },
+    { name: 'Storage', note: 'wp_posts + wp_postmeta, lookup tables, or dedicated WooCommerce tables — an implementation detail the CRUD class shields you from.' },
+  ]}
+  caption="Why $order->get_total() is the right call and $post->_order_total is not: the data store, not your code, decides where the value comes from."
+/>
+
+The practical rules:
+
+<SafetyLevel level="recommended">
+  Read and write WooCommerce entities through their CRUD class:
+  <code>wc_get_product( $id )</code>, <code>wc_get_order( $id )</code>,
+  <code>new WC_Customer( $id )</code>. Call <code>-&gt;save()</code> once after
+  setting values. This stays correct across HPOS and future storage changes.
+</SafetyLevel>
+
+<SafetyLevel level="dangerous">
+  Writing directly to <code>wp_postmeta</code> for orders, or assuming a
+  specific table layout. Under HPOS the write goes to the wrong place or is
+  silently ignored, and reports/emails then disagree with the database.
+</SafetyLevel>
+
+<VerifyNote>the CRUD class list, their base classes (`WC_Data`, `WC_Abstract_Order`, …), and the `WC_Data_Store::load()` / `woocommerce_<type>_data_store` filter names for 11.0.1</VerifyNote>
+
+## Sessions
+
+For anything that must persist across requests but is not a user account —
+the guest cart, applied coupons, chosen shipping method, checkout progress —
+WooCommerce uses its own **session**, separate from PHP sessions.
+
+<Lifecycle
+  steps={[
+    'First front-end action that needs a session (e.g. add to cart) creates one',
+    'A session cookie is set in the visitor\'s browser',
+    'Session data is written to a WooCommerce sessions table, keyed by that cookie',
+    'On later requests the cookie identifies the row; WC()->session loads it',
+    'For logged-in users the session is associated with the user ID',
+    'Expired sessions are cleaned up by a scheduled task',
+  ]}
+  caption="The WooCommerce session lifecycle — the backbone of the cart for guests."
+/>
+
+<VerifyNote>the session cookie name pattern, the sessions table name (`wp_woocommerce_sessions`?), and the cleanup schedule in 11.0.1</VerifyNote>
+
+<Callout type="info">
+  Full-page caching and sessions interact badly if misconfigured: a cached
+  page can show one visitor's cart count to another. Hosts and caching plugins
+  normally exclude cart/checkout/account pages and vary on the session cookie.
+  This gets a full treatment in the Performance section *(planned)*.
+</Callout>
+
+## Classic and Blocks are two front-ends on one core
+
+A recurring architectural fact: the **data and business logic layer is
+shared**, but the storefront presentation exists in two implementations.
+
+<ClassicVsBlocks
+  classic="Shortcodes and PHP templates render cart/checkout. Server-rendered, driven by admin-ajax and classic template hooks. The path most existing code targets."
+  blocks="React components render cart/checkout, talking to the Store API. Customized through block settings, Slot/Fill, and integration interfaces — not PHP template hooks."
+/>
+
+Both ultimately call the same `WC()->cart`, the same totals calculation, and
+the same order-creation code. The split is at the edge, not the core — which
+is why "change the value in core logic, change the presentation per
+front-end" is the reliable customization strategy.
+
+<VerifyNote>which front-end WooCommerce ships as the default for new installs in 11.0.1 (Blocks vs classic for cart and checkout)</VerifyNote>
+
+## Related
+
+<Cards>
+  <Card
+    title="WordPress Fundamentals"
+    href="/docs/foundations/wordpress-fundamentals"
+    description="The request lifecycle and hook system this bootstrap plugs into."
+  />
+  <Card
+    title="WooCommerce Data Model"
+    href="/docs/foundations/woocommerce-data-model"
+    description="The entities the CRUD layer manages and where each is stored."
+  />
+  <Card
+    title="WooCommerce Extension Model"
+    href="/docs/foundations/extension-model"
+    description="Hooks, filters, templates, and blocks as one composable system."
+  />
+</Cards>
