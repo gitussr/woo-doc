@@ -1,0 +1,134 @@
+---
+title: Blocks
+description: The WooCommerce Cart and Checkout Blocks as an extension surface — block settings, Slot/Fill, checkout filters, inner blocks, the PHP IntegrationInterface, the Store API, and the client-side data stores.
+---
+
+<PageMeta priority="P1" audience="Intermediate → Advanced" />
+
+The **Cart and Checkout Blocks** are the React storefront that replaced the
+classic shortcode pages on new installs from WooCommerce 8.3. They render in
+the browser and talk to the [Store API](/docs/development/rest-api#store-api).
+They are **not** extended with PHP template hooks — a different set of APIs
+does the equivalent jobs.
+
+## Why the extension model is different
+
+<ClassicVsBlocks
+  classic="PHP renders HTML on the server. Extend with actions (inject markup), filters (change values), template overrides (replace markup)."
+  blocks="React renders on the client from Store API data. Extend with block settings, Slot/Fill React components, JS checkout filters, custom inner blocks, and — on the server — Store API schema extensions."
+/>
+
+Classic hooks like `woocommerce_checkout_fields`,
+`woocommerce_review_order_before_payment`, and
+`woocommerce_checkout_order_processed` **do not fire** under the Block. Their
+replacements are below and on the [Hooks](/docs/development/hooks) page.
+
+## The extension surface
+
+<LayerStack
+  layers={[
+    { name: 'Block settings', note: 'Attributes exposed in the block editor. The no-code layer — merchants toggle these.' },
+    { name: 'Slot / Fill', note: 'React fills rendered into named regions: ExperimentalOrderMeta (below order summary), ExperimentalOrderShippingPackages, ExperimentalDiscountsMeta. Registered with registerPlugin() and render_scope "woocommerce-checkout".' },
+    { name: 'Checkout filters (JS)', note: 'registerCheckoutFilters( namespace, { … } ) from @woocommerce/blocks-checkout — transform strings like item names, totals labels, the place-order button text, client-side.' },
+    { name: 'Inner blocks', note: 'registerCheckoutBlock() adds a custom block into a permitted area of the Checkout (e.g. the contact or shipping step), with locking rules.' },
+    { name: 'IntegrationInterface (PHP)', note: 'A class implementing Automattic\\WooCommerce\\Blocks\\Integrations\\IntegrationInterface, registered on the woocommerce_blocks_checkout_block_registration / woocommerce_blocks_cart_block_registration actions, to enqueue your scripts/styles and pass data.' },
+    { name: 'Store API schema extension (PHP)', note: 'ExtendSchema via woocommerce_store_api_register_endpoint_data() to add namespaced data to cart/checkout responses, and woocommerce_store_api_register_update_callback() to receive data back and mutate the cart.' },
+  ]}
+  caption="Roughly parallel to actions + filters + templates, but split across JS and a data API."
+/>
+
+## A minimal Slot/Fill
+
+```jsx
+import { registerPlugin } from '@wordpress/plugins';
+import { ExperimentalOrderMeta } from '@woocommerce/blocks-checkout';
+
+const GiftNote = () => (
+    <div className="wd-gift-note">Gift note goes here.</div>
+);
+
+registerPlugin( 'wd-gift-note', {
+    render: () => (
+        <ExperimentalOrderMeta>
+            <GiftNote />
+        </ExperimentalOrderMeta>
+    ),
+    scope: 'woocommerce-checkout',
+} );
+```
+
+<VerifyNote>the exact package name (`@woocommerce/blocks-checkout` vs `@woocommerce/blocks-components`), the `Experimental*` fill names, and the `scope` string for 11.0.1's bundled Blocks version</VerifyNote>
+
+## Reading cart / checkout state
+
+Client code reads state from `@wordpress/data` stores, not from globals:
+
+| Store | Holds |
+| --- | --- |
+| `wc/store/cart` | Cart items, totals, coupons, shipping rates, customer address |
+| `wc/store/checkout` | Checkout status, order ID, custom extension data |
+| `wc/store/payment` | Selected payment method, payment status |
+
+`@woocommerce/settings` (`wc.wcSettings`) exposes `getSetting()` for values
+your `IntegrationInterface` passed from PHP.
+
+<VerifyNote>the current data-store names and whether `useStoreCart` / other hooks from `@woocommerce/base-context` are still the supported read path in 11.0.1</VerifyNote>
+
+## Server side: attach and receive data
+
+```php
+// Expose data on the Store API cart response, namespaced to your plugin.
+add_action( 'woocommerce_init', function () {
+    woocommerce_store_api_register_endpoint_data( array(
+        'endpoint'        => Automattic\WooCommerce\StoreApi\Schemas\V1\CartSchema::IDENTIFIER,
+        'namespace'       => 'wd-gift',
+        'data_callback'   => fn() => array( 'note' => WC()->session->get( 'wd_gift_note', '' ) ),
+        'schema_callback' => fn() => array( 'note' => array( 'type' => 'string' ) ),
+    ) );
+} );
+```
+
+<VerifyNote>the `CartSchema::IDENTIFIER` constant / correct `endpoint` value and the full `woocommerce_store_api_register_endpoint_data()` argument shape for 11.0.1</VerifyNote>
+
+Declare compatibility so the merchant can use the Blocks with your plugin
+active — see
+[Architecture → bootstrap](/docs/foundations/woocommerce-architecture#bootstrap-from-plugin-file-to-wc)
+(`cart_checkout_blocks` feature slug).
+
+## Decision guide
+
+<DecisionGuide>
+  <Choice when="a merchant-facing toggle is enough">Add a block attribute / setting.</Choice>
+  <Choice when="you need to show UI at a known spot in checkout">Slot/Fill into an Experimental* region.</Choice>
+  <Choice when="you need a new field collected at checkout">Inner block + Store API data callback + update callback.</Choice>
+  <Choice when="you only need to reword a label or amount string">registerCheckoutFilters — no server code.</Choice>
+  <Choice when="you need server logic when the order is placed">woocommerce_store_api_checkout_order_processed and related Store API actions.</Choice>
+</DecisionGuide>
+
+<VersionNote version="WooCommerce 11.0.1">
+  The Blocks APIs move faster than core PHP and several are marked
+  `Experimental`. Build against a pinned WooCommerce version and re-test on
+  each minor upgrade. Names on this page are checked against the Blocks
+  package bundled with 11.0.1 where marked; unresolved specifics carry a
+  <VerifyNote /> tag for the Phase 3 accuracy pass.
+</VersionNote>
+
+## Related
+
+<Cards>
+  <Card
+    title="REST API"
+    href="/docs/development/rest-api"
+    description="The Store API that the Blocks read from and post to."
+  />
+  <Card
+    title="JavaScript"
+    href="/docs/development/javascript"
+    description="The classic front-end JS the Blocks replace, and where each still applies."
+  />
+  <Card
+    title="Hooks (Actions)"
+    href="/docs/development/hooks"
+    description="Which classic hooks stop firing once the Block is active."
+  />
+</Cards>

@@ -1,0 +1,124 @@
+---
+title: Filters
+description: How WooCommerce filters work — transforming a value on its way through core, the return-value contract, priority and arguments, the WC_Data dynamic getter filters, and the mistakes that make a filter silently wrong.
+---
+
+<PageMeta priority="P1" audience="Intermediate" />
+
+A **filter** is a value passing through a named checkpoint:
+`$value = apply_filters( 'filter_name', $value, ...$context )`. Your callback
+receives the value, returns a possibly-changed version, and WooCommerce uses
+what you return. Filters are how you change *what something is* — a price, a
+label, a list of fields, a query — without editing core.
+
+For making something *happen*, use an [action](/docs/development/hooks).
+
+## The contract
+
+```php
+add_filter( 'woocommerce_product_single_add_to_cart_text', 'wd_button_text', 10, 2 );
+
+function wd_button_text( $text, $product ) {
+    if ( $product->is_type( 'subscription' ) ) {
+        return __( 'Subscribe now', 'wd' );
+    }
+    return $text; // Always return the value you were given.
+}
+```
+
+<SafetyLevel level="dangerous">
+  A filter callback that does not <code>return</code> sets the value to
+  <code>null</code>. This is the most common filter bug: an early
+  <code>return;</code>, a missing <code>return</code> on one branch, or a
+  <code>var_dump()</code> left in. The button vanishes, the price becomes
+  empty, the field list is wiped.
+</SafetyLevel>
+
+- **Priority** and **accepted args** work exactly as for actions — argument 3
+  and 4 of `add_filter()`. Ask for every context parameter you need; they are
+  only passed up to the count you declare.
+- **Type matters.** If the value is an array, return an array. If it is a
+  formatted HTML string, return a string. Returning the wrong type pushes a
+  bug downstream to wherever the value is finally used.
+
+## The `WC_Data` dynamic getter filters
+
+Product, order, and coupon objects run **every getter through a filter** named
+`woocommerce_<object_type>_get_<property>` — for example
+`woocommerce_product_get_price`, `woocommerce_order_get_total`,
+`woocommerce_coupon_get_amount`. This is why you filter a product's price with
+`woocommerce_product_get_price` rather than hunting for where the catalog
+renders it.
+
+```php
+// Add a 10% surcharge to every product's price, everywhere it is read.
+add_filter( 'woocommerce_product_get_price', 'wd_surcharge', 10, 2 );
+add_filter( 'woocommerce_product_get_regular_price', 'wd_surcharge', 10, 2 );
+add_filter( 'woocommerce_product_variation_get_price', 'wd_surcharge', 10, 2 );
+
+function wd_surcharge( $price, $product ) {
+    if ( '' === $price ) {
+        return $price;
+    }
+    return (float) $price * 1.10;
+}
+```
+
+<SafetyLevel level="risky">
+  These getter filters fire <strong>constantly</strong> — in loops, in the
+  admin, during totals calculation, in REST responses. Keep the callback
+  cheap, guard against empty values, and never call the same getter inside the
+  filter (infinite recursion). For cart-line pricing, prefer setting the price
+  once on <code>woocommerce_before_calculate_totals</code> — see
+  [Developer Mental Model](/docs/introduction/developer-mental-model).
+</SafetyLevel>
+
+## Value vs. display — the recurring trap
+
+<WhereFrom
+  looking={<>A product price that needs to change.</>}
+  origin={<>The stored price, read via <code>woocommerce_product_get_price</code>; then formatted for the catalog via <code>woocommerce_get_price_html</code>; then, in the cart, formatted again via <code>woocommerce_cart_item_price</code>.</>}
+  controls={<>Which of those three layers you filter. Only the first changes the amount WooCommerce calculates and charges with.</>}
+  safe={<>Filter <code>woocommerce_product_get_price</code> for a real change; <code>woocommerce_get_price_html</code> / <code>woocommerce_cart_item_price</code> for display-only changes.</>}
+  avoid={<>Changing <code>woocommerce_cart_item_price</code> to "discount" a line — the customer sees the lower number and is charged the higher one.</>}
+/>
+
+## Removing a filter
+
+```php
+remove_filter( 'woocommerce_get_price_html', 'some_plugin_price_html', 20 );
+```
+
+Same rule as `remove_action()`: exact callback identifier, exact priority. If
+a plugin adds the filter on a hook like `init`, you must remove it on a
+*later* hook so your `remove_filter()` runs after their `add_filter()`.
+
+## Finding filters
+
+- Search the WooCommerce source for `apply_filters(` near the value you care
+  about. Every filter's name and its context parameters are right there.
+- The `woocommerce_<object>_get_<prop>` pattern means you can often guess the
+  name from the getter method (`get_stock_status()` →
+  `woocommerce_product_get_stock_status`). <VerifyNote>confirm the get-filter
+  naming pattern and any exceptions for 11.0.1</VerifyNote>
+- Query Monitor shows filters as well as actions for the current request.
+
+## Related
+
+<Cards>
+  <Card
+    title="Hooks (Actions)"
+    href="/docs/development/hooks"
+    description="The other half of the system — behavior instead of value transformation."
+  />
+  <Card
+    title="Developer Mental Model"
+    href="/docs/introduction/developer-mental-model"
+    description="Why the value layer and the display layer must not be confused."
+  />
+  <Card
+    title="WooCommerce Data Model"
+    href="/docs/foundations/woocommerce-data-model"
+    description="The WC_Data objects whose getters these filters wrap."
+  />
+</Cards>

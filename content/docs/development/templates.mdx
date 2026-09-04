@@ -1,0 +1,125 @@
+---
+title: Templates
+description: The classic WooCommerce template system — how templates are located and loaded, the theme override mechanism, template parts, the variables in scope inside a template, the hooks fired from within them, and when not to override.
+---
+
+<PageMeta priority="P1" audience="Intermediate" />
+
+WooCommerce's **classic** storefront is rendered from PHP template files. A
+theme can replace any of them by providing its own copy. This is powerful and
+frequently the *wrong* first choice — a hook or filter usually reaches what
+you need without the maintenance cost.
+
+Templates apply to the classic front-end only. The
+[Cart and Checkout Blocks](/docs/development/blocks) do not use them.
+
+## How a template is located
+
+Core renders a fragment by calling `wc_get_template()` or
+`wc_get_template_part()`, which delegate path resolution to
+`wc_locate_template()`:
+
+<Lifecycle
+  steps={[
+    'Core: wc_get_template( \'cart/cart-totals.php\', $args )',
+    'wc_locate_template() checks the theme override path first: yourtheme/woocommerce/cart/cart-totals.php',
+    'Then the parent theme (if the active theme is a child)',
+    'Then the default: the WooCommerce plugin\'s templates/ directory',
+    'The woocommerce_locate_template and wc_get_template filters can redirect the path',
+    'The chosen file is included, with $args extracted into local variables',
+  ]}
+  caption="Template resolution. The theme's woocommerce/ folder shadows the plugin's templates/ folder, file for file."
+/>
+
+## Overriding a template in a theme
+
+1. Find the source file under `plugins/woocommerce/templates/` — e.g.
+   `templates/single-product/title.php`.
+2. Copy it to your theme, **dropping the `templates/` segment** and adding a
+   `woocommerce/` prefix: `your-child-theme/woocommerce/single-product/title.php`.
+3. Edit your copy.
+
+<SafetyLevel level="risky">
+  You now maintain a fork of that file. Each core template has an
+  <code>@version</code> docblock; <strong>WooCommerce → Status → System
+  Status</strong> lists every override whose version is behind core
+  ("<em>version X is out of date. The core version is Y</em>"). When it flags
+  one, diff your copy against the new core file and re-apply your change. A
+  stale override silently drops new markup, hooks, and accessibility fixes.
+</SafetyLevel>
+
+<SafetyLevel level="recommended">
+  Before copying a template, check whether an action hook inside it, or a
+  filter on the value it prints, does the job. Overriding
+  <code>price.php</code> to change a price is almost always wrong — filter
+  <code>woocommerce_get_price_html</code> instead.
+</SafetyLevel>
+
+### A plugin can provide templates too
+
+`wc_get_template()` takes `$template_path` and `$default_path` arguments. A
+plugin that calls `wc_get_template( 'foo.php', $args, '', plugin_dir_path( __FILE__ ) . 'templates/' )`
+ships its own template that themes can still override via the standard
+`woocommerce/` folder. <VerifyNote>confirm the `$template_path` /
+`$default_path` argument order and the theme-override precedence for
+plugin-provided templates in 11.0.1</VerifyNote>
+
+## Variables in scope
+
+`wc_get_template( $name, $args )` runs `extract( $args )` before including the
+file, so each key of `$args` becomes a local variable. Which keys exist is
+**per template** — read the `wc_get_template()` call in core that renders it.
+
+Common examples:
+
+| Template | In scope |
+| --- | --- |
+| `single-product/*.php` | `$product` (global `$product` is also set) |
+| `cart/cart.php` | the cart is read from `WC()->cart` |
+| `checkout/form-checkout.php` | `$checkout` (a `WC_Checkout` instance) |
+| `emails/*.php` | `$order`, `$email`, `$sent_to_admin`, `$plain_text` |
+
+<VerifyNote>the exact `$args` keys passed to the most-overridden templates (cart, checkout review, email order details) in 11.0.1</VerifyNote>
+
+## Template parts and hooks inside templates
+
+- **`wc_get_template_part( $slug, $name )`** loads content templates like
+  `content-product.php` from the loop. Themes override these the same way.
+- Templates contain **`do_action()` calls** — these are the injection points
+  you should prefer over editing the file. `content-single-product.php` is
+  almost entirely `do_action( 'woocommerce_single_product_summary' )` and
+  siblings; the markup lives in hooked callbacks, not the template.
+
+<Callout type="info">
+  If you keep a template override, **keep its `do_action()` calls**. Removing
+  them silently disables every plugin (and core feature) that injects there.
+</Callout>
+
+## When not to override
+
+<DecisionGuide>
+  <Choice when="a filter changes the value">Filter it. No override.</Choice>
+  <Choice when="an action hook inside the template reaches the position">Hook it. No override.</Choice>
+  <Choice when="you need structural markup changes a hook cannot make, on the classic front-end">Override — and register it in System Status review.</Choice>
+  <Choice when="the store uses the Cart/Checkout Blocks">Overriding `cart/` or `checkout/` templates does nothing. Use the Blocks APIs.</Choice>
+</DecisionGuide>
+
+## Related
+
+<Cards>
+  <Card
+    title="Hooks (Actions)"
+    href="/docs/development/hooks"
+    description="The do_action() calls inside templates — the preferred alternative to overriding."
+  />
+  <Card
+    title="Blocks"
+    href="/docs/development/blocks"
+    description="The Cart/Checkout front-end that templates do not touch."
+  />
+  <Card
+    title="WooCommerce Extension Model"
+    href="/docs/foundations/extension-model"
+    description="Where template overrides sit among the four mechanisms."
+  />
+</Cards>

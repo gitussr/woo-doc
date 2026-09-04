@@ -1,0 +1,145 @@
+---
+title: JavaScript
+description: WooCommerce's front-end JavaScript — the core script handles, the jQuery events fired on document.body for cart and checkout, the cart fragments system and its cost, and how the Blocks change the picture.
+---
+
+<PageMeta priority="P1" audience="Intermediate" />
+
+The classic WooCommerce front-end ships a set of jQuery-based scripts that
+drive add-to-cart, the cart page, the checkout, variation selection, and the
+country/state selects. They communicate through **events fired on
+`document.body`** — that event bus is the main integration point.
+
+The [Cart and Checkout Blocks](/docs/development/blocks) replace most of this
+with React and `@wordpress/data`; the split is noted throughout.
+
+## Core script handles
+
+Enqueue your script with the relevant handle as a dependency so it loads
+after WooCommerce's:
+
+| Handle | Loads on | Drives |
+| --- | --- | --- |
+| `woocommerce` | WooCommerce pages | Shared helpers |
+| `wc-add-to-cart` | Shop / archive pages | AJAX add-to-cart from product loops |
+| `wc-single-product` | Single product | Variation form, image gallery/zoom |
+| `wc-cart` | Cart page | Quantity updates, coupon, shipping calculator |
+| `wc-checkout` | Checkout page | Field validation, `update_checkout`, place order |
+| `wc-cart-fragments` | see below | Mini-cart refresh via `sessionStorage` |
+| `wc-country-select` / `wc-address-i18n` | Cart / checkout / account | Country → state select behavior, locale field ordering |
+| `selectWoo` | forms with enhanced selects | The bundled Select2 fork |
+
+<VerifyNote>the exact registered handles and their file paths in 11.0.1, and which are still enqueued by default vs. conditionally</VerifyNote>
+
+## The event bus
+
+Bind to these on `$( document.body )`:
+
+**Cart / add-to-cart**
+
+| Event | Fires when |
+| --- | --- |
+| `adding_to_cart` | An AJAX add-to-cart request is about to be sent |
+| `added_to_cart` | Add-to-cart succeeded (params include the fragments and cart hash) |
+| `removed_from_cart` | An item was removed via AJAX |
+| `wc_cart_emptied` | The cart was emptied |
+| `updated_wc_div` | The cart page markup was replaced after an update |
+| `updated_cart_totals` | The cart totals block was refreshed |
+
+**Checkout**
+
+| Event | Fires when |
+| --- | --- |
+| `init_checkout` | Checkout script initialises |
+| `update_checkout` | *Trigger this* to ask WooCommerce to recalculate the review order |
+| `updated_checkout` | The review-order fragment finished refreshing |
+| `checkout_error` | Server-side validation failed on place-order |
+| `country_to_state_changed` | The country select changed and states were rebuilt |
+| `payment_method_selected` | The customer picked a different gateway |
+
+```js
+// Recalculate checkout whenever a custom field changes.
+jQuery( function ( $ ) {
+    $( document.body ).on( 'change', '#wd_delivery_date', function () {
+        $( document.body ).trigger( 'update_checkout' );
+    } );
+} );
+```
+
+<VerifyNote>confirm this event list and names against the bundled 11.0.1 scripts; note which are documented vs. de-facto</VerifyNote>
+
+<Callout type="warn">
+  Under the **Checkout Block**, `update_checkout` / `updated_checkout` /
+  `payment_method_selected` and the rest of this bus **do not fire**. React
+  components subscribe to the `wc/store/checkout` and `wc/store/payment` data
+  stores instead.
+</Callout>
+
+## Cart fragments
+
+The mini-cart and cart-count widgets update without a page reload via the
+**fragments** system:
+
+<Lifecycle
+  steps={[
+    'An AJAX add-to-cart succeeds',
+    'The response includes fragments: an object of CSS selector → replacement HTML',
+    'The woocommerce_add_to_cart_fragments PHP filter builds that object',
+    'wc-cart-fragments.js replaces each selector\'s contents and stores the result + a cart hash in sessionStorage',
+    'On the next page load the stored fragments render immediately; a background ?wc-ajax=get_refreshed_fragments call re-validates',
+  ]}
+  caption="Fragments trade a background request for an instantly-correct mini-cart across page loads."
+/>
+
+```php
+// Add a custom element to the set of fragments kept in sync.
+add_filter( 'woocommerce_add_to_cart_fragments', function ( $fragments ) {
+    ob_start();
+    // …render your element…
+    $fragments['.wd-cart-badge'] = ob_get_clean();
+    return $fragments;
+} );
+```
+
+<SafetyLevel level="risky">
+  The background <code>get_refreshed_fragments</code> request is uncached and
+  runs on <em>every</em> page for every visitor with the script loaded — a
+  measurable TTFB cost on a busy store. Since WooCommerce 7.8 core only
+  enqueues <code>wc-cart-fragments</code> when the Mini-Cart is present. If you
+  do not use a live mini-cart, keep it dequeued outside cart/checkout.
+  <VerifyNote>confirm the 7.8 conditional-enqueue behavior still holds in 11.0.1</VerifyNote>
+</SafetyLevel>
+
+## Blocks: reading state in JS
+
+```js
+import { select, subscribe } from '@wordpress/data';
+
+subscribe( () => {
+    const cart = select( 'wc/store/cart' ).getCartData();
+    // react to cart.itemsCount, cart.totals, …
+} );
+```
+
+Values passed from PHP (via an `IntegrationInterface`) are read with
+`getSetting()` from `@woocommerce/settings`.
+
+## Related
+
+<Cards>
+  <Card
+    title="AJAX"
+    href="/docs/development/ajax"
+    description="The request side of the classic front-end — wc-ajax, nonces, params objects."
+  />
+  <Card
+    title="Blocks"
+    href="/docs/development/blocks"
+    description="The React front-end and its data stores that replace this event bus."
+  />
+  <Card
+    title="Shortcodes"
+    href="/docs/development/shortcodes"
+    description="Why per-visitor data belongs in a fragment, not cached page output."
+  />
+</Cards>

@@ -1,0 +1,13 @@
+{
+  "title": "Development",
+  "pages": [
+    "hooks",
+    "filters",
+    "templates",
+    "shortcodes",
+    "blocks",
+    "ajax",
+    "rest-api",
+    "javascript"
+  ]
+}

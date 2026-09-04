@@ -1,0 +1,117 @@
+---
+title: AJAX
+description: How WooCommerce does AJAX — the admin-ajax endpoint, WooCommerce's own wc-ajax fast path, nonces and the params objects, the built-in cart/checkout AJAX actions, and how to add your own safely.
+---
+
+<PageMeta priority="P1" audience="Intermediate" />
+
+WooCommerce uses AJAX heavily on the classic front-end: adding to cart from a
+loop, updating quantities, applying coupons, refreshing the checkout totals.
+There are **two** transports, and knowing which one an action uses tells you
+where to hook it.
+
+## Two transports
+
+<LayerStack
+  layers={[
+    { name: 'admin-ajax.php', note: 'WordPress core. POST to /wp-admin/admin-ajax.php with an action param. Handlers hook wp_ajax_<action> (logged in) and wp_ajax_nopriv_<action> (guests). Loads all of WordPress + admin.' },
+    { name: 'WC AJAX (wc-ajax)', note: 'WooCommerce\'s fast path. Request to /?wc-ajax=<action> (or the WC_AJAX::get_endpoint() URL). Handlers hook wc_ajax_<action> and wc_ajax_nopriv_<action>. Skips loading wp-admin, so it is lighter for front-end calls.' },
+  ]}
+/>
+
+Core front-end actions — `add_to_cart`, `remove_from_cart`, `apply_coupon`,
+`update_shipping_method`, `get_refreshed_fragments`, `update_order_review`,
+`checkout`, `get_variation` — go through **`wc-ajax`**.
+
+<VerifyNote>the complete list of built-in `wc_ajax_*` actions and whether any moved to the Store API in 11.0.1</VerifyNote>
+
+## Nonces and the params objects
+
+Front-end scripts receive their endpoint URLs and nonces from small localized
+objects that WooCommerce prints:
+
+| Object | Used by | Notable keys |
+| --- | --- | --- |
+| `wc_add_to_cart_params` | add-to-cart JS | `ajax_url`, `wc_ajax_url`, `cart_url` |
+| `wc_cart_params` | cart page JS | `ajax_url`, `wc_ajax_url`, `update_shipping_method_nonce`, `apply_coupon_nonce` |
+| `wc_checkout_params` | checkout JS | `ajax_url`, `wc_ajax_url`, `update_order_review_nonce`, `checkout_url` |
+| `woocommerce_params` | shared | `ajax_url`, `wc_ajax_url` |
+
+<VerifyNote>the exact object names and nonce keys localized in 11.0.1, and the script handles they attach to</VerifyNote>
+
+On the server, verify with `check_ajax_referer( 'action-name', 'security' )`
+(or `wp_verify_nonce()`), then a capability check where the action is not
+purely public.
+
+<SafetyLevel level="dangerous">
+  An AJAX handler with no nonce check and no capability check is a CSRF hole —
+  worse if it writes data or reveals another customer's order. Every custom
+  handler: nonce first, capability second, then the work.
+</SafetyLevel>
+
+## Adding your own front-end AJAX
+
+```php
+// 1. Localize an endpoint + nonce onto a script you enqueue.
+wp_localize_script( 'wd-frontend', 'wdAjax', array(
+    'url'   => admin_url( 'admin-ajax.php' ),
+    'nonce' => wp_create_nonce( 'wd_estimate' ),
+) );
+
+// 2. Register the handler for both logged-in and guest users.
+add_action( 'wp_ajax_wd_estimate',        'wd_estimate' );
+add_action( 'wp_ajax_nopriv_wd_estimate', 'wd_estimate' );
+
+function wd_estimate() {
+    check_ajax_referer( 'wd_estimate', 'nonce' );
+    $qty = absint( $_POST['qty'] ?? 0 );
+    wp_send_json_success( array( 'total' => wc_price( $qty * 9.99 ) ) );
+}
+```
+
+Use the `wc-ajax` path instead when the call is high-frequency and does not
+need the admin environment:
+
+```php
+add_action( 'wc_ajax_wd_estimate',        'wd_estimate' );
+add_action( 'wc_ajax_nopriv_wd_estimate', 'wd_estimate' );
+// Endpoint: home_url( '/?wc-ajax=wd_estimate' )
+```
+
+<VerifyNote>confirm `wc_ajax_nopriv_<action>` is still the guest hook name (vs. relying on a single `wc_ajax_<action>`) in 11.0.1</VerifyNote>
+
+## Cart fragments
+
+The mini-cart / cart-count updates after an AJAX add-to-cart come from the
+**cart fragments** system: `get_refreshed_fragments` returns an array of
+`selector => html`, filtered by `woocommerce_add_to_cart_fragments`, and the
+`wc-cart-fragments` script swaps each selector's contents and caches the
+result in `sessionStorage`. Details and its performance cost are on the
+[JavaScript](/docs/development/javascript#cart-fragments) page.
+
+## Blocks note
+
+The Cart and Checkout **Blocks do not use `wc-ajax`.** They use the
+[Store API](/docs/development/rest-api#store-api) (`/wp-json/wc/store/v1/…`)
+with a cart token. A custom `wc_ajax_*` handler you wrote for the classic
+checkout will not run under the Block.
+
+## Related
+
+<Cards>
+  <Card
+    title="JavaScript"
+    href="/docs/development/javascript"
+    description="The client half — scripts, events, and cart fragments."
+  />
+  <Card
+    title="REST API"
+    href="/docs/development/rest-api"
+    description="The Store API that replaces wc-ajax under the Blocks."
+  />
+  <Card
+    title="Hooks (Actions)"
+    href="/docs/development/hooks"
+    description="Registering the wc_ajax_* / wp_ajax_* handlers your endpoints hang off."
+  />
+</Cards>

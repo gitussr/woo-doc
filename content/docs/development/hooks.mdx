@@ -1,0 +1,136 @@
+---
+title: Hooks (Actions)
+description: How WooCommerce action hooks work — registering and removing callbacks, priority and argument count, finding the right hook, and debugging which hooks actually fire on a given request.
+---
+
+<PageMeta priority="P1" audience="Intermediate" />
+
+An **action** is a named moment in execution where WooCommerce (or WordPress)
+calls `do_action( 'hook_name', ...$args )`. Any code registered against that
+name runs at that point. Actions are how you make something *happen* —
+output markup, send a message, write a record — without editing core.
+
+For changing a *value*, you want a [filter](/docs/development/filters), not an
+action.
+
+## The mechanics
+
+```php
+// In a plugin or mu-plugin.
+add_action( 'woocommerce_thankyou', 'wd_notify_fulfilment', 10, 1 );
+
+function wd_notify_fulfilment( $order_id ) {
+    $order = wc_get_order( $order_id );
+    if ( ! $order ) {
+        return;
+    }
+    // …do something with the order.
+}
+```
+
+- **Argument 3 — priority** (default `10`). Lower runs earlier. Core often
+  hooks its own output at `10`; use `9` to go before it, `11` to go after.
+- **Argument 4 — accepted args** (default `1`). WooCommerce may pass several
+  parameters to an action; you only receive the number you declare. Declaring
+  too few is a silent bug — the later parameters are simply not passed.
+- The callback's **return value is ignored.** Returning something from an
+  action callback does nothing.
+
+<SafetyLevel level="recommended">
+  Register hooks from a plugin or <code>mu-plugin</code>, not a theme, unless
+  the behavior is purely presentational and tied to that theme. Commerce logic
+  in <code>functions.php</code> disappears when the theme is switched.
+</SafetyLevel>
+
+## Removing and replacing core callbacks
+
+To change what a core action *does*, remove its callback and add your own. You
+must match the **exact** callback identifier and priority used in core.
+
+```php
+// Move the add-to-cart button below the product meta on single product pages.
+add_action( 'init', function () {
+    remove_action( 'woocommerce_single_product_summary', 'woocommerce_template_single_add_to_cart', 30 );
+    add_action( 'woocommerce_single_product_summary', 'woocommerce_template_single_add_to_cart', 45 );
+} );
+```
+
+<SafetyLevel level="risky">
+  <code>remove_action()</code> for a **method on an object instance**
+  (e.g. <code>[ WC()-&gt;something, 'method' ]</code>) needs a reference to the
+  same instance and the same priority. If core refactors how it registers that
+  callback, your <code>remove_action()</code> silently stops matching and the
+  original behavior returns. Re-check on WooCommerce updates.
+</SafetyLevel>
+
+## Finding the right hook
+
+<Lifecycle
+  steps={[
+    'Locate the output — view source vs. inspect DOM (a difference means JS/AJAX built it; see JavaScript and AJAX)',
+    'Search the WooCommerce plugin source for nearby static text or the template file',
+    'Read the template / function: do_action() calls in it are your injection points',
+    'Confirm the hook fires on this request type and under the active cart/checkout implementation',
+  ]}
+  caption="Hook discovery is a source-reading task, not guesswork."
+/>
+
+Practical tools:
+
+- **WooCommerce templates** carry `do_action()` calls with clear names
+  (`woocommerce_before_main_content`, `woocommerce_single_product_summary`, …).
+  The template file *is* the hook map for classic output.
+- **`wc-template-hooks.php`** in the WooCommerce plugin wires core callbacks to
+  those actions — read it to see what already runs at each position and at
+  what priority. <VerifyNote>exact path of the template-hooks file in 11.0.1</VerifyNote>
+- **Query Monitor** (plugin) lists every hook fired on the current request,
+  with callbacks and file references.
+- **`all` hook** — for a one-off trace, `add_action( 'all', … )` logs every
+  hook name. Noisy; never ship it.
+
+## Debugging which hooks fire
+
+```php
+// Temporary: log every WooCommerce action as it fires, with its priority.
+add_action( 'all', function ( $hook ) {
+    if ( str_starts_with( (string) $hook, 'woocommerce_' ) ) {
+        error_log( 'HOOK: ' . $hook );
+    }
+} );
+```
+
+Common reasons a hook "doesn't fire":
+
+| Symptom | Cause |
+| --- | --- |
+| Nothing happens at all | Callback registered *after* the action already ran — register earlier (e.g. on `init`) |
+| Works on the front end, not in admin/REST/cron | That action only fires in a front-end request context |
+| Worked before Blocks | It is a classic cart/checkout hook; the Block does not fire it (see [Blocks](/docs/development/blocks)) |
+| Fires but output is missing | Wrong priority — another callback removed or overwrote it later |
+
+<VersionNote version="WooCommerce 11.0.1">
+  WooCommerce keeps a deprecated-hook handler that maps some removed hook names
+  to current ones and emits a notice when the old name is used. Do not rely on
+  it — treat a deprecation notice as "fix this now". <VerifyNote>the class name
+  and list of mapped hooks for 11.0.1</VerifyNote>
+</VersionNote>
+
+## Related
+
+<Cards>
+  <Card
+    title="Filters"
+    href="/docs/development/filters"
+    description="The other half of the hook system — changing a value instead of adding behavior."
+  />
+  <Card
+    title="Templates"
+    href="/docs/development/templates"
+    description="Where most classic action hooks are fired from."
+  />
+  <Card
+    title="Where Does This Come From?"
+    href="/docs/introduction/where-does-this-come-from"
+    description="The locate-before-you-edit pattern hook discovery is part of."
+  />
+</Cards>

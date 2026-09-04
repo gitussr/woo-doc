@@ -1,0 +1,121 @@
+---
+title: REST API
+description: WooCommerce's two HTTP APIs — the wc/v3 REST API for server-to-server integration and the wc/store/v1 Store API for the browser — their auth models, how to add custom routes, and when to use which.
+---
+
+<PageMeta priority="P1" audience="Intermediate → Advanced" />
+
+WooCommerce exposes **two** HTTP APIs built on the WordPress REST
+infrastructure (`/wp-json/`). They look similar and are used for opposite
+purposes.
+
+<LayerStack
+  layers={[
+    { name: 'wc/v3 — REST API', note: 'Server-to-server. Full CRUD on stored records: products, orders, customers, coupons, refunds, reports, settings, webhooks. Authenticated with API keys. Not for the browser.' },
+    { name: 'wc/store/v1 — Store API', note: 'Browser-facing. Manages the session cart and drives the Cart/Checkout Blocks. Authenticated with a cart token / nonce, no API keys. Read-heavy public product data plus cart/checkout mutation.' },
+  ]}
+/>
+
+## wc/v3 REST API
+
+Base: `/wp-json/wc/v3/`. Main resources:
+
+| Route | Purpose |
+| --- | --- |
+| `products`, `products/<id>/variations`, `products/categories`, `products/attributes` | Catalog CRUD |
+| `orders`, `orders/<id>/notes`, `orders/<id>/refunds` | Order CRUD and history |
+| `customers` | Customer records |
+| `coupons` | Coupon CRUD |
+| `reports/*` | Sales, top sellers, totals |
+| `webhooks` | Outbound webhook subscriptions |
+| `system_status` | The status report as JSON |
+
+<VerifyNote>the complete `wc/v3` resource list and any routes added or deprecated in 11.0.1 (release notes mention analytics import endpoints under `wc-analytics`)</VerifyNote>
+
+### Auth
+
+- **API keys** — generated at WooCommerce → Settings → Advanced → REST API, as
+  a consumer key / consumer secret pair with a Read / Write / Read-Write
+  scope. Sent over HTTPS as HTTP Basic auth or as query parameters on
+  non-HTTPS (discouraged).
+- **Cookie auth + nonce** — for same-origin requests from a logged-in admin
+  (e.g. a custom admin screen), send the `X-WP-Nonce` header from
+  `wp_create_nonce( 'wp_rest' )`.
+
+<SafetyLevel level="risky">
+  API keys are full credentials for whatever scope they carry. A Read-Write
+  key can create orders and read every customer's PII. Scope them minimally,
+  store them as secrets, and revoke unused ones.
+</SafetyLevel>
+
+## Store API
+
+Base: `/wp-json/wc/store/v1/`. Main endpoints: `cart`, `cart/items`,
+`cart/coupons`, `cart/select-shipping-rate`, `cart/update-customer`,
+`checkout`, `products`, `products/collection-data`.
+
+<VerifyNote>the full `wc/store/v1` endpoint list and the current cart-token header name (`Cart-Token` / `Nonce`) for 11.0.1</VerifyNote>
+
+It is **stateful**: requests carry a cart token that identifies the
+[WooCommerce session](/docs/foundations/woocommerce-architecture#sessions), so
+`POST wc/store/v1/cart/add-item` mutates *this visitor's* cart. This is why it
+is safe to call from the browser and why it is not a general integration API.
+
+Extend it with `ExtendSchema` rather than raw filters — see
+[Blocks → server side](/docs/development/blocks#server-side-attach-and-receive-data).
+
+## Adding a custom route
+
+Neither API is designed for you to bolt resources onto. For custom endpoints,
+register your own namespace with WordPress core's `register_rest_route()`:
+
+```php
+add_action( 'rest_api_init', function () {
+    register_rest_route( 'wd/v1', '/stock-alert', array(
+        'methods'             => 'POST',
+        'callback'            => 'wd_stock_alert',
+        'permission_callback' => fn() => current_user_can( 'manage_woocommerce' ),
+        'args'                => array(
+            'product_id' => array( 'required' => true, 'sanitize_callback' => 'absint' ),
+        ),
+    ) );
+} );
+```
+
+<SafetyLevel level="dangerous">
+  A route with <code>'permission_callback' =&gt; '__return_true'</code> is
+  public. If it reads or writes store data, that is a data-exposure bug.
+  Always supply a real permission callback.
+</SafetyLevel>
+
+You can reuse WooCommerce's CRUD objects (`wc_get_product()`,
+`wc_get_order()`) inside your callback — do not query tables directly.
+
+## Which to use
+
+<DecisionGuide>
+  <Choice when="an external system syncs products/orders">`wc/v3` with a scoped API key.</Choice>
+  <Choice when="a browser needs to read or change the current cart">Store API (`wc/store/v1`).</Choice>
+  <Choice when="you built a headless storefront">Store API for cart/checkout, `wc/v3` (server-side only) for catalog and account data.</Choice>
+  <Choice when="you need a bespoke operation">Your own `register_rest_route()` namespace with a permission callback.</Choice>
+</DecisionGuide>
+
+## Related
+
+<Cards>
+  <Card
+    title="Blocks"
+    href="/docs/development/blocks"
+    description="The Store API's primary consumer, and how to extend its schema."
+  />
+  <Card
+    title="AJAX"
+    href="/docs/development/ajax"
+    description="The classic-front-end transport the Store API replaces under Blocks."
+  />
+  <Card
+    title="WordPress Fundamentals"
+    href="/docs/foundations/wordpress-fundamentals"
+    description="The WordPress REST layer both APIs are built on."
+  />
+</Cards>

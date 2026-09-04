@@ -1,0 +1,101 @@
+---
+title: Shortcodes
+description: The WooCommerce shortcodes — the page shortcodes that back the classic cart, checkout, and account pages, the product-display shortcodes, how they are registered, and how the Blocks migration changes their role.
+---
+
+<PageMeta priority="P2" audience="Beginner → Intermediate" />
+
+A shortcode is a `[bracketed]` token in post content that WordPress replaces
+with rendered output. WooCommerce registers a set of them through the
+`WC_Shortcodes` class on `init`. Two groups matter for different reasons.
+
+## Page shortcodes
+
+The classic Cart, Checkout, and My Account pages are **just WordPress pages
+containing one shortcode**:
+
+| Shortcode | Renders | Backing method |
+| --- | --- | --- |
+| `[woocommerce_cart]` | The cart page | `WC_Shortcodes::cart()` |
+| `[woocommerce_checkout]` | The checkout page | `WC_Shortcodes::checkout()` |
+| `[woocommerce_my_account]` | The account dashboard, orders, addresses | `WC_Shortcodes::my_account()` |
+| `[woocommerce_order_tracking]` | The order-status lookup form | `WC_Shortcodes::order_tracking()` |
+
+WooCommerce stores which page holds which shortcode in options
+(`woocommerce_cart_page_id`, `woocommerce_checkout_page_id`,
+`woocommerce_myaccount_page_id`). Those page IDs — not the shortcode text —
+are how core builds cart/checkout URLs and redirects.
+
+<Callout type="warn">
+  Removing the shortcode from the page, or deleting the page, breaks checkout
+  routing even if another page renders a cart. Repair via **WooCommerce →
+  Status → Tools → "Create default WooCommerce pages"**. <VerifyNote>exact tool
+  label in 11.0.1</VerifyNote>
+</Callout>
+
+<ClassicVsBlocks
+  classic="The page contains [woocommerce_cart] / [woocommerce_checkout]. Server-rendered from templates; customized with template hooks and filters."
+  blocks="Since WooCommerce 8.3 new installs ship the Cart and Checkout Blocks in these pages instead of the shortcodes. Same page IDs, different rendering and different extension APIs."
+/>
+
+## Product-display shortcodes
+
+For putting products into arbitrary content (a landing page, a blog post):
+
+| Shortcode | Output |
+| --- | --- |
+| `[products]` | A configurable product grid — the modern, unified one (attributes: `ids`, `category`, `tag`, `limit`, `columns`, `orderby`, `on_sale`, `best_selling`, `top_rated`, …) |
+| `[product_page id="99"]` | A full single-product layout for one product |
+| `[add_to_cart id="99"]` | Price + add-to-cart button for one product |
+| `[add_to_cart_url id="99"]` | Just the add-to-cart URL |
+| `[product_categories]` | A grid of category tiles |
+
+<VerifyNote>the full current shortcode list, and which legacy product shortcodes (`[recent_products]`, `[featured_products]`, `[sale_products]`, …) are still registered vs. folded into `[products]` in 11.0.1</VerifyNote>
+
+The `[products]` query can be filtered:
+
+```php
+// Exclude out-of-stock products from every [products] shortcode.
+add_filter( 'woocommerce_shortcode_products_query', function ( $query_args, $atts, $type ) {
+    $query_args['meta_query'][] = array(
+        'key'   => '_stock_status',
+        'value' => 'instock',
+    );
+    return $query_args;
+}, 10, 3 );
+```
+
+<VerifyNote>the `woocommerce_shortcode_products_query` filter signature and whether it still receives `$type` in 11.0.1</VerifyNote>
+
+## Registering your own
+
+Nothing WooCommerce-specific — use WordPress's `add_shortcode()`. If your
+output depends on the cart or customer, make sure the shortcode is not
+running in a context where `WC()->cart` is null, and remember shortcode output
+is often **cached** with the page.
+
+<SafetyLevel level="risky">
+  Shortcodes that render per-visitor data (cart contents, "hello, name") fight
+  full-page caching. Either exclude the page from cache or move the dynamic
+  part to a [cart fragment](/docs/development/javascript) / Store API call.
+</SafetyLevel>
+
+## Related
+
+<Cards>
+  <Card
+    title="Blocks"
+    href="/docs/development/blocks"
+    description="What replaced the cart/checkout shortcodes on modern installs."
+  />
+  <Card
+    title="Templates"
+    href="/docs/development/templates"
+    description="How the page shortcodes render their output."
+  />
+  <Card
+    title="JavaScript"
+    href="/docs/development/javascript"
+    description="Cart fragments — the caching-safe way to show per-visitor data."
+  />
+</Cards>
