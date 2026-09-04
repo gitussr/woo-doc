@@ -1,0 +1,157 @@
+---
+title: Schema Reference
+description: Every WooCommerce-defined database table and its columns — order storage, order items, catalog and customer lookup tables, tax and shipping config, sessions and security, and operational tables.
+---
+
+<PageMeta priority="P4" audience="Advanced" versions="WooCommerce 11.0.1" />
+
+All tables below are prefixed with the WordPress table prefix (`wp_` by
+default) and defined in `WC_Install::get_schema()`, except the HPOS order
+tables, defined by the orders data store. This is a lookup page — read
+[Database](/docs/data-storage/database) first for how these tables relate,
+and [HPOS](/docs/data-storage/hpos) for the order tables specifically.
+
+<Callout type="warn">
+  Read and write through the CRUD layer (`wc_get_product()`, `wc_get_order()`,
+  …). This page is for understanding what a query returns and for read-only
+  reporting SQL — not a green light to write to these tables directly.
+</Callout>
+
+## Orders (HPOS)
+
+### `wc_orders`
+
+The order record.
+
+`id, status, type, currency, tax_amount, total_amount, customer_id, billing_email, date_created_gmt, date_updated_gmt, parent_order_id, payment_method, payment_method_title, ip_address, transaction_id, user_agent, customer_note`
+
+`type` distinguishes an order (`shop_order`) from a refund
+(`shop_order_refund`); a refund's `parent_order_id` points back to the order
+it refunds.
+
+### `wc_order_addresses`
+
+One row per address on an order.
+
+`id, order_id, address_type, first_name, last_name, company, address_1, address_2, city, state, postcode, country, email, phone`
+
+`address_type` is `billing` or `shipping` — an order has up to two rows here.
+
+### `wc_order_operational_data`
+
+Internal state not exposed as a primary order field.
+
+`id, order_id, created_via, woocommerce_version, prices_include_tax, coupon_usages_are_counted, download_permission_granted, cart_hash, new_order_email_sent, order_key, order_stock_reduced, date_paid_gmt, date_completed_gmt, shipping_tax_amount, shipping_total_amount, discount_tax_amount, discount_total_amount, recorded_sales`
+
+### `wc_orders_meta`
+
+`id, order_id, meta_key, meta_value` — the HPOS equivalent of post meta, for
+data not promoted to a real column (mostly extensions' own data).
+
+## Order line items
+
+Unchanged by HPOS — the same tables serve both legacy and HPOS orders.
+
+### `woocommerce_order_items`
+
+`order_item_id, order_item_name, order_item_type, order_id`
+
+`order_item_type` is one of `line_item` (product), `fee`, `shipping`,
+`coupon`, `tax`.
+
+### `woocommerce_order_itemmeta`
+
+`meta_id, order_item_id, meta_key, meta_value` — per-line detail: product/
+variation id, quantity, subtotal/total, tax breakdown, chosen variation
+attributes.
+
+## Catalog and customer lookup tables
+
+Denormalized, indexed copies kept in sync by WooCommerce — never the source
+of truth. See [Database → why the lookup tables exist](/docs/data-storage/database#why-the-lookup-tables-exist).
+
+### `wc_product_meta_lookup`
+
+`product_id, sku, global_unique_id, virtual, downloadable, min_price, max_price, onsale, stock_quantity, stock_status, rating_count, average_rating, total_sales, tax_status, tax_class`
+
+The catalog's fast path for pricing, stock, and rating queries — added in
+WooCommerce 3.7.
+
+### `wc_product_attributes_lookup`
+
+`product_id, product_or_parent_id, taxonomy, term_id, is_variation_attribute, in_stock` — primary key on all four identifying columns. Backs attribute-based filtering (including only showing in-stock variations). Population is feature-gated; a store may have this table created but not yet backfilled.
+
+### `wc_customer_lookup`
+
+`customer_id, user_id, username, first_name, last_name, email, date_last_active, date_registered, country, postcode, city, state, billing_phone, shipping_phone`
+
+`user_id = 0` identifies a guest customer, matched by `email` — see
+[WooCommerce Data Model → Customers](/docs/foundations/woocommerce-data-model#customers).
+
+### Analytics lookup tables
+
+Populated from orders as they are placed, and used by WooCommerce Analytics
+reports instead of querying orders directly.
+
+| Table | Columns |
+| --- | --- |
+| `wc_order_stats` | `order_id, parent_id, date_created(_gmt), date_paid, date_completed, num_items_sold, total_sales, tax_total, shipping_total, net_total, returning_customer, status, customer_id, fulfillment_status` |
+| `wc_order_product_lookup` | `order_item_id, order_id, product_id, variation_id, customer_id, date_created, product_qty, product_net_revenue, product_gross_revenue, coupon_amount, tax_amount, shipping_amount, shipping_tax_amount` |
+| `wc_order_tax_lookup` | `order_id, tax_rate_id, order_item_id, date_created, shipping_tax, order_tax, total_tax` |
+| `wc_order_coupon_lookup` | `order_id, coupon_id, date_created, discount_amount` |
+
+## Tax and shipping configuration
+
+| Table | Columns |
+| --- | --- |
+| `woocommerce_tax_rates` | `tax_rate_id, tax_rate_country, tax_rate_state, tax_rate, tax_rate_name, tax_rate_priority, tax_rate_compound, tax_rate_shipping, tax_rate_order, tax_rate_class` |
+| `woocommerce_tax_rate_locations` | `location_id, location_code, tax_rate_id, location_type` (postcode / city match refinements) |
+| `wc_tax_rate_classes` | `tax_rate_class_id, name, slug` — the custom tax classes beyond Standard/Reduced/Zero |
+| `woocommerce_shipping_zones` | `zone_id, zone_name, zone_order` |
+| `woocommerce_shipping_zone_locations` | `location_id, zone_id, location_code, location_type` |
+| `woocommerce_shipping_zone_methods` | `zone_id, instance_id, method_id, method_order, is_enabled` |
+
+See [Shipping & Tax](/docs/lifecycle/shipping-and-tax) for how these tables
+are used during calculation.
+
+## Attributes and downloads
+
+| Table | Columns |
+| --- | --- |
+| `woocommerce_attribute_taxonomies` | `attribute_id, attribute_name, attribute_label, attribute_type, attribute_orderby, attribute_public` — the registry behind each `pa_*` taxonomy |
+| `woocommerce_downloadable_product_permissions` | `permission_id, download_id, product_id, order_id, order_key, user_email, user_id, downloads_remaining, access_granted, access_expires, download_count` |
+| `wc_download_log` | `download_log_id, timestamp, permission_id, user_id, user_ip_address` |
+| `wc_product_download_directories` | `url_id, url, enabled` — approved external hosts for downloadable file URLs |
+
+## Sessions and security
+
+| Table | Columns |
+| --- | --- |
+| `woocommerce_sessions` | `session_id, session_key, session_value, session_expiry` — see [Architecture → Sessions](/docs/foundations/woocommerce-architecture#sessions) |
+| `woocommerce_api_keys` | `key_id, user_id, description, permissions, consumer_key, consumer_secret, nonces, truncated_key, last_access` — REST API credentials |
+| `woocommerce_payment_tokens` | `token_id, gateway_id, token, user_id, type, is_default` |
+| `woocommerce_payment_tokenmeta` | `meta_id, payment_token_id, meta_key, meta_value` (e.g. `WC_Payment_Token_CC`'s `last4`, `expiry_year`) |
+| `wc_reserved_stock` | `order_id, product_id, stock_quantity, timestamp, expires` — the checkout stock hold, see [Products → Stock](/docs/lifecycle/products#stock) |
+| `wc_rate_limits` | `rate_limit_id, rate_limit_key, rate_limit_expiry, rate_limit_remaining` — generic rate limiting used by core and extensions |
+
+## Operational
+
+| Table | Columns |
+| --- | --- |
+| `wc_webhooks` | `webhook_id, status, name, user_id, delivery_url, secret, topic, date_created(_gmt), date_modified(_gmt), api_version, failure_count, pending_delivery` |
+| `woocommerce_log` | `log_id, timestamp, level, source, message, context` — the WooCommerce → Status → Logs viewer reads this |
+
+<VersionNote version="WooCommerce 11.0.1">
+  Table shapes here come from `WC_Install::get_schema()` and the HPOS
+  column-mapping constants for this release. A few tables are created but
+  populated only once a related feature is active (`wc_product_attributes_lookup`,
+  `wc_rate_limits`) — an empty table is not necessarily a bug.
+</VersionNote>
+
+## Related
+
+<Cards>
+  <Card title="Database" href="/docs/data-storage/database" description="The concepts and judgment calls behind this schema." />
+  <Card title="HPOS" href="/docs/data-storage/hpos" description="The order tables above, in depth — modes, migration, dual-mode code." />
+  <Card title="WooCommerce Data Model" href="/docs/foundations/woocommerce-data-model" description="The entities these tables back." />
+</Cards>

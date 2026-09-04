@@ -77,7 +77,18 @@ shipping package/rate filters + classic-vs-Block selection, `WC_Payment_*` +
 `woocommerce_register_additional_checkout_field`. No open `VerifyNote` tags
 remain in `content/docs/lifecycle/`.
 
-Next: Phase 5 (data and storage — Database, HPOS) — see roadmap.
+Phase 5 (Data and Storage) content is **drafted**: `content/docs/data-storage/`
+has `database` (P2 concept), `hpos` (P1 concept), `schema-reference` (P4 full
+column listing), grouped under a "Data & Storage" folder and wired into root
+`meta.json` after `lifecycle`. IA tree + section reference updated. Table/
+column data was pulled directly from `WC_Install::get_schema()` and the HPOS
+column-mapping constants in 11.0.1 core source, so almost everything is
+already accurate — only **one** `VerifyNote` remains (the HPOS migration
+controller class/CLI and whether legacy post rows are retained after
+migration), in `data-storage/hpos.mdx`.
+
+Next: finish that one-item Phase 5 accuracy pass, then Phase 6
+(customization, debugging, operations) — see roadmap.
 
 Remaining `VerifyNote` tags elsewhere: `about/design-system.mdx` only, as
 intentional component demos.

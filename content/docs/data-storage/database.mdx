@@ -1,0 +1,124 @@
+---
+title: Database
+description: How WooCommerce stores data — the WordPress core tables it reuses, the custom tables it adds on top, why the lookup tables exist, and when to query directly versus go through the CRUD layer.
+---
+
+<PageMeta priority="P2" audience="Advanced" />
+
+WooCommerce's storage is two tiers stacked on each other: **WordPress's own
+tables**, which it reuses for content-shaped data, and **WooCommerce's own
+tables**, added for the things WordPress has no concept of — order line
+items, tax rates, sessions, payment tokens, and fast lookup copies of hot
+fields. Knowing which tier a piece of data lives in is what makes a query
+correct instead of merely working today.
+
+The full column-by-column listing is the
+[Schema Reference](/docs/data-storage/schema-reference); this page is the
+map and the judgment calls.
+
+## The two tiers
+
+<LayerStack
+  layers={[
+    { name: 'WordPress core tables', note: 'wp_posts, wp_postmeta, wp_users, wp_usermeta, wp_options, wp_terms / wp_term_taxonomy / wp_term_relationships — reused as-is' },
+    { name: 'WooCommerce custom tables', note: 'purpose-built tables for data WordPress has no shape for: order items, sessions, tax rates, payment tokens, webhooks, and several read-optimized lookup tables' },
+  ]}
+  caption="WooCommerce did not fork WordPress storage — it extended it where the content model ran out, and added dedicated tables where performance or shape demanded it."
+/>
+
+## What lives in WordPress's tables
+
+| WordPress table | WooCommerce uses it for |
+| --- | --- |
+| `wp_posts` | Products (`product`), variations (`product_variation`), coupons (`shop_coupon`); legacy-mode orders (`shop_order`, `shop_order_refund`) |
+| `wp_postmeta` | Product fields (`_price`, `_sku`, `_stock`, …), legacy order fields |
+| `wp_terms` / `wp_term_taxonomy` / `wp_term_relationships` | Product categories/tags, the internal `product_type` and `product_visibility` taxonomies, and one taxonomy per global attribute (`pa_*`) |
+| `wp_users` / `wp_usermeta` | Customer accounts (role `customer`), billing/shipping address meta |
+| `wp_options` | Every store setting (`woocommerce_*` keys), most autoloaded |
+
+<Callout type="warn">
+  Products are still fundamentally **posts**. Orders are the exception — see
+  [HPOS](/docs/data-storage/hpos): a default install stores them in dedicated
+  tables, not `wp_posts`.
+</Callout>
+
+## What WooCommerce's own tables hold
+
+<LayerStack
+  layers={[
+    { name: 'Order data (HPOS)', note: 'wc_orders, wc_order_addresses, wc_order_operational_data, wc_orders_meta — the order record itself under High-Performance Order Storage' },
+    { name: 'Order line data', note: 'woocommerce_order_items, woocommerce_order_itemmeta — unchanged by HPOS, and never were post meta' },
+    { name: 'Lookup / read-optimized copies', note: 'wc_product_meta_lookup, wc_product_attributes_lookup, wc_customer_lookup, and the wc_order_*_lookup analytics tables — denormalized for fast queries, kept in sync by WooCommerce, never the source of truth' },
+    { name: 'Rules and config', note: 'woocommerce_tax_rates(+_locations), woocommerce_shipping_zones(+_locations/_methods), woocommerce_attribute_taxonomies' },
+    { name: 'Session and security', note: 'woocommerce_sessions, woocommerce_api_keys, woocommerce_payment_tokens(+meta), wc_rate_limits, wc_reserved_stock' },
+    { name: 'Operational', note: 'woocommerce_downloadable_product_permissions, wc_download_log, wc_webhooks, woocommerce_log' },
+  ]}
+  caption="Grouped by role. Full columns are in the Schema Reference."
+/>
+
+## Why the lookup tables exist
+
+`wp_postmeta` and `wp_termmeta` are schemaless: `meta_value` is an
+unindexed-by-value text column, and finding "all in-stock products under
+$20" means joining several meta rows per product. WooCommerce keeps
+**denormalized, indexed copies** of the fields that catalog and reporting
+queries actually filter and sort on:
+
+<WhereFrom
+  looking={<>The shop page's <strong>price-sorted, in-stock-only</strong> product list.</>}
+  origin={<>Not a live join across <code>wp_postmeta</code> rows — the query hits <code>wc_product_meta_lookup</code>, which has real <code>min_price</code>/<code>max_price</code> and <code>stock_status</code> columns with indexes.</>}
+  controls={<>The lookup table's sync, triggered whenever the product is saved.</>}
+  safe={<>Read prices/stock through <code>wc_get_product()</code> getters, which are already backed by the lookup table where relevant. Query the lookup table directly only for bulk reporting SQL.</>}
+  avoid={<>Writing to the lookup table directly — it is a cache of postmeta/HPOS data, not the source of truth, and your write will be overwritten on the next sync.</>}
+/>
+
+<Callout type="info">
+  This is the same pattern HPOS applies to the entire order record: replace
+  scattered meta rows with real columns. The product lookup table did it for
+  one entity years earlier.
+</Callout>
+
+## Meta patterns
+
+| Pattern | Where | Notes |
+| --- | --- | --- |
+| WordPress post meta | `wp_postmeta` | Product and legacy-order fields; underscore-prefixed keys are hidden from the custom-fields UI |
+| WooCommerce order meta | `wc_orders_meta` (HPOS) or `wp_postmeta` (legacy) | Reached only through `$order->get_meta()` / `add_meta_data()` — never a raw table |
+| Order item meta | `woocommerce_order_itemmeta` | Per line item — quantity, tax breakdown, chosen variation attributes |
+| User meta | `wp_usermeta` | Billing/shipping address for account holders |
+
+## When to query directly vs. use the CRUD layer
+
+<DecisionGuide>
+  <Choice when="you are inside normal plugin/theme code touching one or a few records">
+    Always the CRUD layer — `wc_get_product()`, `wc_get_order()`,
+    `new WC_Customer()`. It is correct under both legacy and HPOS storage, and
+    keeps the lookup tables in sync on write.
+  </Choice>
+  <Choice when="you need to aggregate or filter across a large number of records">
+    A direct, read-only query against the appropriate **lookup table**
+    (`wc_product_meta_lookup`, the `wc_order_*_lookup` analytics tables) is
+    the sanctioned fast path — it is what WooCommerce's own reports use.
+  </Choice>
+  <Choice when="you are about to write directly to any WooCommerce or HPOS table">
+    Stop. There is no supported reason to `INSERT`/`UPDATE` these tables
+    outside WooCommerce's own code — you will desync the lookup tables, the
+    order tables, or both.
+  </Choice>
+</DecisionGuide>
+
+<VersionNote version="WooCommerce 11.0.1">
+  Table names, prefixes, and columns on this page and the
+  [Schema Reference](/docs/data-storage/schema-reference) reflect
+  `WC_Install::get_schema()` and the HPOS orders-table-store definitions for
+  this release. A few tables are feature-gated (created but not populated
+  until the related feature is active) — see the reference page.
+</VersionNote>
+
+## Related
+
+<Cards>
+  <Card title="Schema Reference" href="/docs/data-storage/schema-reference" description="Every table, column by column." />
+  <Card title="HPOS" href="/docs/data-storage/hpos" description="The order-storage tables in depth, including migration." />
+  <Card title="WooCommerce Data Model" href="/docs/foundations/woocommerce-data-model" description="The entities these tables back, and their CRUD classes." />
+</Cards>

@@ -71,8 +71,11 @@ WooDoc
 │   └── Emails
 │
 ├── Customers
-├── Database
-├── HPOS
+├── Data & Storage
+│   ├── Database
+│   ├── HPOS
+│   └── Schema Reference
+│
 ├── Customization
 ├── Debugging
 ├── Performance
@@ -152,16 +155,17 @@ WooDoc
 - **Does not belong here** — generic extension mechanics (link to Development
   instead), unrelated subsystems.
 
-### Database
+### Data & Storage — Database, HPOS, Schema Reference
 
 - **Purpose** — how WooCommerce stores data: core WordPress tables it uses,
-  WooCommerce's custom tables, meta usage, and query patterns.
+  WooCommerce's custom tables, meta usage, query patterns, and a full
+  column-by-column schema lookup.
 - **Audience** — advanced.
 - **Priority** — <PriorityBadge level="P2" /> concepts,
   <PriorityBadge level="P4" /> schema reference.
 - **Belongs here** — table purposes, relationships, when to query directly vs
   use CRUD classes, and migration/compatibility notes.
-- **Does not belong here** — HPOS specifics (its own section), ORM-style
+- **Does not belong here** — HPOS specifics (its own page below), ORM-style
   tutorials unrelated to WooCommerce.
 
 ### HPOS (High-Performance Order Storage)
@@ -233,8 +237,8 @@ WooDoc
 ## How this maps to the current site
 
 Today, WooDoc ships **Introduction**, **Foundations**, **Development**,
-**Commerce Lifecycle**, and this **About WooDoc** section. The data/storage
-sections (Database, HPOS) and the operations sections (Customization,
+**Commerce Lifecycle**, **Data & Storage**, and this **About WooDoc** section.
+A dedicated **Customers** page and the operations sections (Customization,
 Debugging, Performance, Security, Limitations) in the tree above are planned.
 The [Roadmap](/docs/about/roadmap) sequences the build.
 
