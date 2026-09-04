@@ -1,0 +1,145 @@
+---
+title: Cart
+description: The cart subsystem — what the cart is (session data, not a table), the shape of a cart item, the totals calculation pipeline and its fixed order of operations, where coupons and fees apply, and how to change a line price correctly.
+---
+
+<PageMeta priority="P1" audience="Intermediate → Advanced" />
+
+The cart is the most misunderstood part of WooCommerce. It is **not a database
+table** — it is per-visitor
+[session data](/docs/foundations/woocommerce-architecture#sessions) that is
+recalculated from scratch on almost every request. Understanding the
+recalculation pipeline is the key to changing anything about pricing.
+
+## What the cart is
+
+<LayerStack
+  layers={[
+    { name: 'WC()->cart', note: 'a WC_Cart instance, built per request on the front end' },
+    { name: 'Cart contents', note: 'an array of cart items, keyed by a hash of product + variation + extras' },
+    { name: 'Session storage', note: 'the contents array and applied coupons persist in the WooCommerce session between requests' },
+    { name: 'Totals', note: 'subtotal, discount, fee, shipping, tax, total — recomputed by calculate_totals(), never trusted from the session' },
+  ]}
+/>
+
+Each **cart item** is an array. The important keys:
+
+| Key | Holds |
+| --- | --- |
+| `product_id`, `variation_id`, `variation` | What was added |
+| `quantity` | How many |
+| `data` | A live `WC_Product` object for this line — this is what pricing reads |
+| `line_subtotal`, `line_total`, `line_tax`, `line_subtotal_tax` | Filled in by the totals pipeline |
+| `key` | The cart item key (the array key) |
+
+<VerifyNote>confirm the full documented cart-item key list and how the cart item key hash is generated (`woocommerce_cart_id`) in 11.0.1</VerifyNote>
+
+## The totals calculation pipeline
+
+`WC()->cart->calculate_totals()` runs a **fixed sequence**. Since WooCommerce
+3.2 the arithmetic lives in a dedicated totals class.
+<VerifyNote>confirm the class name (`WC_Cart_Totals`) and entry point for
+11.0.1</VerifyNote>
+
+<Lifecycle
+  steps={[
+    'woocommerce_before_calculate_totals fires — last chance to change line prices',
+    'Line subtotals: quantity × product price, before discounts',
+    'Coupons / discounts applied to lines and/or the cart',
+    'Fees added (via the woocommerce_cart_calculate_fees hook → $cart->add_fee())',
+    'Shipping calculated for the chosen package(s) and rate',
+    'Tax calculated on lines, fees, and shipping per the tax settings',
+    'Totals rounded and summed; woocommerce_after_calculate_totals fires',
+  ]}
+  caption="The order is not configurable. Discounts before fees before shipping before tax."
+/>
+
+<Callout type="warn">
+  Because totals are recomputed every request, anything you change must be
+  re-applied every time `calculate_totals()` runs — you cannot "set it once".
+  Hook the pipeline, don't patch a stored total.
+</Callout>
+
+## Coupons
+
+An applied coupon is stored in the session as a code. During calculation
+`WC_Discounts` loads each `WC_Coupon`, validates it against the current cart
+(usage limits, product/category restrictions, min/max spend, expiry), and
+applies the discount by `discount_type`
+(`percent` / `fixed_cart` / `fixed_product`).
+
+<WhereFrom
+  looking={<>A <strong>discount line</strong> in the cart totals.</>}
+  origin={<>The cart totals template, from <code>$cart-&gt;get_coupon_discount_totals()</code>, populated by <code>WC_Discounts</code> during <code>calculate_totals()</code>.</>}
+  controls={<>The coupon's rules; the validity filters (<code>woocommerce_coupon_is_valid</code>); the discount-amount filters.</>}
+  safe={<>Adjust validity with <code>woocommerce_coupon_is_valid</code>; adjust the computed discount with the coupon discount filters; add programmatic discounts as a negative fee.</>}
+  avoid={<>Editing the totals template to fake a discount row without changing the calculated total.</>}
+/>
+
+## Fees
+
+Fees are the sanctioned way to add a positive or negative amount to the cart
+that is not a product line:
+
+```php
+add_action( 'woocommerce_cart_calculate_fees', function ( $cart ) {
+    if ( is_admin() && ! defined( 'DOING_AJAX' ) ) {
+        return;
+    }
+    if ( $cart->get_cart_contents_weight() > 20 ) {
+        $cart->add_fee( __( 'Heavy item handling', 'wd' ), 7.50, true ); // taxable
+    }
+} );
+```
+
+A negative fee is how you apply a programmatic discount that a coupon cannot
+express.
+
+## Changing a line price
+
+The correct place is `woocommerce_before_calculate_totals` — set the price on
+the line's product object, which the pipeline then uses for every subsequent
+step (subtotal, tax, total):
+
+```php
+add_action( 'woocommerce_before_calculate_totals', function ( $cart ) {
+    if ( is_admin() && ! defined( 'DOING_AJAX' ) ) {
+        return;
+    }
+    foreach ( $cart->get_cart() as $item ) {
+        if ( ! empty( $item['wd_engraving'] ) ) {
+            $item['data']->set_price( $item['data']->get_price() + 15 );
+        }
+    }
+} );
+```
+
+<SafetyLevel level="dangerous">
+  Filtering <code>woocommerce_cart_item_price</code> to show a different number
+  changes the <em>display only</em>. The customer is still charged the
+  calculated total. Value at the calculation layer, formatting at the display
+  layer — never confuse them.
+</SafetyLevel>
+
+## Fragments
+
+The mini-cart / cart-count refresh after AJAX add-to-cart is the **fragments**
+system — covered in
+[JavaScript → cart fragments](/docs/development/javascript#cart-fragments).
+Its background `get_refreshed_fragments` request has a real per-page cost on
+busy stores.
+
+## Classic vs Blocks
+
+<ClassicVsBlocks
+  classic="The [woocommerce_cart] shortcode renders cart/*.php templates. Updates go through wc-ajax (update_shipping_method, apply_coupon, …)."
+  blocks="The Cart Block reads WC()->cart via the Store API (wc/store/v1/cart). Same WC_Cart, same calculate_totals() pipeline underneath — only the presentation and the transport differ."
+/>
+
+## Related
+
+<Cards>
+  <Card title="Checkout" href="/docs/lifecycle/checkout" description="Where the calculated cart becomes an order." />
+  <Card title="Shipping & Tax" href="/docs/lifecycle/shipping-and-tax" description="Two stages of the totals pipeline in detail." />
+  <Card title="Developer Mental Model" href="/docs/introduction/developer-mental-model" description="Why one price change ripples through this whole pipeline." />
+</Cards>

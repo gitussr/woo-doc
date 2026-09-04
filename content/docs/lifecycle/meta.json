@@ -1,0 +1,12 @@
+{
+  "title": "Commerce Lifecycle",
+  "pages": [
+    "products",
+    "cart",
+    "checkout",
+    "orders",
+    "payments",
+    "shipping-and-tax",
+    "emails"
+  ]
+}

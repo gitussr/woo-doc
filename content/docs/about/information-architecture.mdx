@@ -61,14 +61,16 @@ WooDoc
 │   ├── REST API
 │   └── JavaScript
 │
-├── Products
-├── Cart
-├── Checkout
-├── Orders
-├── Payments
-├── Shipping
+├── Commerce Lifecycle
+│   ├── Products
+│   ├── Cart
+│   ├── Checkout
+│   ├── Orders
+│   ├── Payments
+│   ├── Shipping & Tax
+│   └── Emails
+│
 ├── Customers
-├── Emails
 ├── Database
 ├── HPOS
 ├── Customization
@@ -136,11 +138,12 @@ WooDoc
   reference pages under the relevant feature section, tagged
   <PriorityBadge level="P4" />).
 
-### Feature sections — Products, Cart, Checkout, Orders, Payments, Shipping, Customers, Emails
+### Commerce Lifecycle — Products, Cart, Checkout, Orders, Payments, Shipping & Tax, Emails
 
 - **Purpose** — one deep, self-contained treatment per subsystem: what it is,
   where it lives, its lifecycle, its data, its hooks/filters/templates/blocks,
-  its gotchas, and its safe customization patterns.
+  its gotchas, and its safe customization patterns. (Customers is currently
+  folded into Checkout and Orders; it may get its own page later.)
 - **Audience** — intermediate to advanced.
 - **Priority** — <PriorityBadge level="P1" /> for the concepts,
   <PriorityBadge level="P4" /> for the reference tables within them.
@@ -229,10 +232,11 @@ WooDoc
 
 ## How this maps to the current site
 
-Today, WooDoc ships **Introduction**, **Foundations**, **Development**, and
-this **About WooDoc** section. The feature sections, data/storage sections,
-and the operations sections in the tree above are planned. The
-[Roadmap](/docs/about/roadmap) sequences the build.
+Today, WooDoc ships **Introduction**, **Foundations**, **Development**,
+**Commerce Lifecycle**, and this **About WooDoc** section. The data/storage
+sections (Database, HPOS) and the operations sections (Customization,
+Debugging, Performance, Security, Limitations) in the tree above are planned.
+The [Roadmap](/docs/about/roadmap) sequences the build.
 
 ## Related
 

@@ -1,0 +1,125 @@
+---
+title: Orders
+description: The order subsystem — the order statuses and what each means, the status-transition hook family, order items, stock reduction timing, refunds, and order notes.
+---
+
+<PageMeta priority="P1" audience="Intermediate → Advanced" />
+
+An order is the durable record of a purchase. Its **status** drives almost
+every side effect in WooCommerce — emails, stock, downloads, reports — so the
+status-transition hooks are the most important surface on this subsystem.
+
+Storage (HPOS vs legacy) is covered in
+[WooCommerce Data Model](/docs/foundations/woocommerce-data-model#orders-and-order-items).
+
+## Statuses
+
+Order statuses are stored with a `wc-` prefix internally and referred to
+without it in code (`$order->get_status()` returns `processing`, not
+`wc-processing`).
+
+| Status | Meaning | Typical trigger |
+| --- | --- | --- |
+| `pending` | Awaiting payment | Order just created |
+| `on-hold` | Awaiting payment confirmation / manual review | Offline gateway (BACS/cheque), or a fraud hold |
+| `processing` | Paid, needs fulfilment | Payment complete for a physical order |
+| `completed` | Fulfilled, nothing left to do | Admin marks it, or auto for downloads-only |
+| `cancelled` | Cancelled by admin or customer | Manual, or unpaid-order cleanup |
+| `refunded` | Fully refunded | A refund covering the whole total |
+| `failed` | Payment failed or was declined | Gateway rejection |
+| `checkout-draft` | Block checkout in progress, not yet placed | The Checkout Block's draft order |
+
+<VerifyNote>confirm the full status list and slugs for 11.0.1, including `checkout-draft`, and any statuses added since (e.g. around the Block checkout)</VerifyNote>
+
+Register a custom status with `register_post_status()` (legacy) /
+`wc_register_order_status`-style registration plus the
+`wc_order_statuses` filter.
+<VerifyNote>the exact custom-status registration steps and filter names (`wc_order_statuses`, `woocommerce_register_shop_order_post_statuses`) for 11.0.1</VerifyNote>
+
+## The transition hook family
+
+When an order's status changes, WooCommerce fires a cascade — hook the most
+specific one that fits:
+
+<LayerStack
+  layers={[
+    { name: 'woocommerce_order_status_changed', note: '( $order_id, $from, $to, $order ) — every transition' },
+    { name: 'woocommerce_order_status_<new>', note: 'e.g. woocommerce_order_status_processing — any transition into that status' },
+    { name: 'woocommerce_order_status_<from>_to_<to>', note: 'e.g. woocommerce_order_status_pending_to_processing — one specific transition' },
+    { name: 'woocommerce_payment_complete', note: '( $order_id ) — fired by a gateway calling $order->payment_complete(), independent of status name' },
+  ]}
+/>
+
+<SafetyLevel level="risky">
+  Status transition hooks can fire during checkout, from admin, from the REST
+  API, from webhooks, and from bulk actions. Make the callback idempotent —
+  guard with an order meta flag so re-running a transition does not double-send
+  an email or double-charge a downstream system.
+</SafetyLevel>
+
+## Stock and side effects
+
+<Lifecycle
+  steps={[
+    'Order placed (pending) — stock is held, not reduced',
+    'payment_complete() or transition to processing/completed — wc_reduce_stock_levels(), grant downloadable access, send the "processing" email',
+    'Transition to completed — send the "completed" email; for downloads-only orders this can be automatic',
+    'Transition to cancelled or refunded — wc_increase_stock_levels() restores stock',
+  ]}
+  caption="Most side effects hang off the transition into processing or completed — not off order creation."
+/>
+
+<VerifyNote>confirm which hook(s) call `wc_reduce_stock_levels()` and `wc_maybe_increase_stock_levels()` in 11.0.1, and the option that controls automatic stock reduction</VerifyNote>
+
+## Order items
+
+The goods and money on an order are its **items**, not order meta:
+
+| Item class | `order_item_type` | Carries |
+| --- | --- | --- |
+| `WC_Order_Item_Product` | `line_item` | product/variation id, qty, subtotal, total, tax |
+| `WC_Order_Item_Shipping` | `shipping` | method title, method id, cost, taxes |
+| `WC_Order_Item_Fee` | `fee` | name, amount, tax |
+| `WC_Order_Item_Coupon` | `coupon` | code, discount, discount tax |
+| `WC_Order_Item_Tax` | `tax` | rate id, label, tax total, shipping tax total |
+
+Iterate with `$order->get_items( 'line_item' )` (or `'fee'`, `'shipping'`, …).
+Each item is a CRUD object with its own `get_meta()` / `add_meta_data()`.
+
+## Refunds
+
+A refund is a **negative child order** (`WC_Order_Refund`, post type
+`shop_order_refund` in legacy mode):
+
+```php
+$refund = wc_create_refund( array(
+    'order_id'       => $order->get_id(),
+    'amount'         => 20.00,
+    'reason'         => 'Damaged in transit',
+    'line_items'     => array( /* item_id => array( qty, refund_total, refund_tax ) */ ),
+    'restock_items'  => true,
+) );
+```
+
+- A refund covering the full total moves the order to `refunded`.
+- `woocommerce_order_refunded` and `woocommerce_refund_created` fire.
+- Whether money actually moves depends on the gateway supporting
+  `refunds` — otherwise the refund is recorded but must be issued manually.
+
+<VerifyNote>confirm `wc_create_refund` argument keys and the refund hook names for 11.0.1</VerifyNote>
+
+## Order notes
+
+`$order->add_order_note( $text, $is_customer_note = false )`. Customer notes
+trigger the "Note to customer" email; private notes are admin-only. System
+events (payment, status changes, gateway messages) are recorded as notes
+automatically — the note history is the first place to look when debugging an
+order.
+
+## Related
+
+<Cards>
+  <Card title="Checkout" href="/docs/lifecycle/checkout" description="How the order is created before this lifecycle begins." />
+  <Card title="Payments" href="/docs/lifecycle/payments" description="What drives the pending → processing transition." />
+  <Card title="Emails" href="/docs/lifecycle/emails" description="The transactional emails wired to these transitions." />
+</Cards>

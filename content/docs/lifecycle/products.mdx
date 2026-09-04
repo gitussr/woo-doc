@@ -1,0 +1,137 @@
+---
+title: Products
+description: The product subsystem — the built-in product types and their CRUD classes, how variable products and variations fit together, the price fields and the price pipeline, and how stock is tracked and held.
+---
+
+<PageMeta priority="P1" audience="Intermediate → Advanced" />
+
+A product is the catalog entity everything else in WooCommerce is priced and
+stocked against. This page covers what a product *is* at runtime, how the
+price you see is assembled, and how stock is tracked. The storage layout is in
+[WooCommerce Data Model](/docs/foundations/woocommerce-data-model#products);
+this page is about behavior.
+
+## Product types
+
+The `product_type` taxonomy term on the product selects a CRUD subclass:
+
+| Type | Class | What it is |
+| --- | --- | --- |
+| `simple` | `WC_Product_Simple` | One SKU, one price, optional stock |
+| `variable` | `WC_Product_Variable` | A parent with attributes; buyable variations are its children |
+| `grouped` | `WC_Product_Grouped` | A display container that links to other simple products; not itself purchasable |
+| `external` | `WC_Product_External` | An "affiliate" product — the add-to-cart button links off-site |
+
+Extensions register more (`subscription`, `bundle`, `booking`, …) by adding a
+`product_type` term and filtering the class map.
+<VerifyNote>the `woocommerce_product_class` filter name/signature and the
+`product_type` → class resolution path in 11.0.1</VerifyNote>
+
+Get the right object with `wc_get_product( $id )` — it returns the correct
+subclass. Check with `$product->get_type()` or `$product->is_type( 'variable' )`.
+
+## Variable products and variations
+
+<Lifecycle
+  steps={[
+    'The variable parent (post type product) holds the attributes and their possible values',
+    'Each purchasable combination is a variation (post type product_variation), a child post',
+    'A variation stores its own price, SKU, stock, weight, image — or inherits blanks from the parent',
+    'The front-end variations form (wc-add-to-cart-variation script) resolves the customer\'s attribute choices to one variation ID via AJAX',
+    'That variation ID is what goes into the cart',
+  ]}
+  caption="A variable product is a parent plus N child variation posts. The cart always holds a concrete variation."
+/>
+
+<WhereFrom
+  looking={<>The <strong>price range</strong> ("$10 – $25") on a variable product.</>}
+  origin={<>Computed from the min and max active price across all visible variations, cached in the <code>wc_product_meta_lookup</code> table's <code>min_price</code> / <code>max_price</code> columns, then formatted by <code>woocommerce_get_price_html</code> (variable products also pass through <code>woocommerce_variable_price_html</code>).</>}
+  controls={<>The variations' prices; the lookup-table sync; the price-HTML filters.</>}
+  safe={<>Filter <code>woocommerce_variable_price_html</code> for the range display; filter the per-variation price with <code>woocommerce_product_variation_get_price</code>.</>}
+  avoid={<>Assuming the range updates instantly after editing a variation in code without a lookup-table resync (<code>$product-&gt;save()</code> on the parent triggers it).</>}
+/>
+
+## The price pipeline
+
+A product carries three stored price fields and one computed one:
+
+| Field | Getter | Meaning |
+| --- | --- | --- |
+| Regular price | `get_regular_price()` | The normal price |
+| Sale price | `get_sale_price()` | The discounted price, if any |
+| Active price | `get_price()` | Sale price when a sale is on, else regular price |
+| — | `get_price_html()` | The formatted string with currency, "was/now", suffix |
+
+<SafetyLevel level="recommended">
+  Change the <em>value</em> with <code>woocommerce_product_get_price</code> /
+  <code>_get_regular_price</code> / <code>_get_sale_price</code> (and the
+  <code>_variation_</code> equivalents). Change the <em>display</em> with
+  <code>woocommerce_get_price_html</code>. See
+  [Filters](/docs/development/filters#the-wc_data-dynamic-getter-filters).
+</SafetyLevel>
+
+<SafetyLevel level="risky">
+  For per-customer or per-cart pricing, do <strong>not</strong> filter
+  <code>get_price</code> globally — it fires everywhere and you will fight
+  caching and admin screens. Set the line price during cart calculation
+  instead (see [Cart](/docs/lifecycle/cart#changing-a-line-price)).
+</SafetyLevel>
+
+Whether a sale is "on" also depends on the sale schedule
+(`_sale_price_dates_from` / `_sale_price_dates_to`); WooCommerce runs a
+scheduled task that clears expired sale prices.
+<VerifyNote>the scheduled hook name that expires sale prices in 11.0.1</VerifyNote>
+
+## Stock
+
+Stock is tracked at two levels and expressed two ways:
+
+<LayerStack
+  layers={[
+    { name: 'Stock management toggle', note: '_manage_stock (per product, and a store-wide default). Off = the product is always "in stock".' },
+    { name: 'Stock quantity', note: '_stock — the integer count, when management is on' },
+    { name: 'Stock status', note: '_stock_status — instock / outofstock / onbackorder. Derived from quantity when management is on; set manually when it is off. Mirrored into wc_product_meta_lookup for catalog queries.' },
+    { name: 'Backorders', note: '_backorders — no / notify / yes. Controls whether purchase is allowed below zero.' },
+  ]}
+/>
+
+### Stock changes through the order lifecycle
+
+<Lifecycle
+  steps={[
+    'Add to cart / checkout — stock is not yet reduced',
+    'Order is placed — a "stock hold" is recorded so concurrent buyers cannot oversell (held for a configurable number of minutes)',
+    'Payment completes (or the order moves to processing/completed) — wc_reduce_stock_levels() decrements _stock and updates status',
+    'Order is cancelled or fully refunded — wc_increase_stock_levels() restores it',
+  ]}
+  caption="Stock is reserved at checkout and only decremented when the order is paid — with a time-limited hold to prevent overselling in between."
+/>
+
+<VerifyNote>confirm the reservation mechanism (`ReserveStock` / `wc_reserve_stock_for_order`), the "hold stock (minutes)" option key, and the exact hooks that call `wc_reduce_stock_levels()` in 11.0.1</VerifyNote>
+
+<Callout type="info">
+  WooCommerce 11.0 enables **product object caching by default for new
+  stores** and includes query optimizations for large catalogs and variable
+  products. Reads of `wc_get_product()` may be served from the object cache;
+  writes invalidate it.
+</Callout>
+
+## Extension surface
+
+| You want to… | Use |
+| --- | --- |
+| Add a product data field | Product data metabox hooks + `woocommerce_process_product_meta`; expose via a `get_`/`set_` on a custom product class or via meta |
+| Add a product type | Register a `product_type` term + a `WC_Product_*` subclass + class-map filter |
+| Change catalog visibility / query | `woocommerce_product_query`, `woocommerce_products_widget_query_args`, the `product_visibility` taxonomy |
+| Change purchasability | `woocommerce_is_purchasable`, `woocommerce_variation_is_purchasable` |
+| React to a stock change | `woocommerce_product_set_stock`, `woocommerce_low_stock`, `woocommerce_no_stock` |
+
+<VerifyNote>confirm these hook names and add the current product-data-panel action hooks for 11.0.1</VerifyNote>
+
+## Related
+
+<Cards>
+  <Card title="WooCommerce Data Model" href="/docs/foundations/woocommerce-data-model" description="Where product and variation data is stored." />
+  <Card title="Cart" href="/docs/lifecycle/cart" description="How product prices become line totals." />
+  <Card title="Filters" href="/docs/development/filters" description="The getter filters that wrap every price and stock field." />
+</Cards>

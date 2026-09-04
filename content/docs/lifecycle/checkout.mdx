@@ -1,0 +1,121 @@
+---
+title: Checkout
+description: The checkout subsystem — the WC_Checkout controller, where the field list comes from and how to change it, the validation pipeline, how an order is created from the cart, and how all of this differs between classic and the Checkout Block.
+---
+
+<PageMeta priority="P1" audience="Intermediate → Advanced" />
+
+Checkout is where a recalculated [cart](/docs/lifecycle/cart) becomes a
+persisted [order](/docs/lifecycle/orders). It is also where the classic and
+Block front-ends diverge the most — the data and order-creation logic is
+shared, but field handling and validation hooks are completely different.
+
+## The controller
+
+`WC()->checkout()` returns the `WC_Checkout` singleton. It owns the field
+definitions, runs validation, and creates the order.
+
+<Lifecycle
+  steps={[
+    'Render — the field list is assembled and output (classic template, or the Checkout Block from the Store API)',
+    'Submit — POST to admin-ajax (?wc-ajax=checkout) classically, or POST wc/store/v1/checkout for the Block',
+    'Validate — required fields, formats, and custom rules',
+    'Create order — WC_Order built from the cart; addresses copied; line items, shipping, fees, coupons, taxes written',
+    'Process payment — the chosen gateway takes over (see Payments)',
+    'Result — redirect to the order-received page, or return validation errors',
+  ]}
+  caption="The checkout flow. Steps 3–4 are shared code; steps 1–2 differ by front-end."
+/>
+
+## Where the field list comes from
+
+The classic checkout fields are assembled from country-aware address fields
+plus account and order fields, then passed through filters:
+
+<LayerStack
+  layers={[
+    { name: 'WC_Countries::get_address_fields()', note: 'billing_/shipping_ address fields, ordered and labelled per the country locale' },
+    { name: 'woocommerce_default_address_fields', note: 'filter the shared address field definitions (first_name, last_name, company, address_1, …)' },
+    { name: 'woocommerce_billing_fields / woocommerce_shipping_fields', note: 'filter each address group' },
+    { name: 'woocommerce_checkout_fields', note: 'the top-level filter — billing, shipping, account, order (order_comments). Add/remove/reorder here.' },
+  ]}
+/>
+
+```php
+// Classic checkout: make the phone field optional and add a delivery note.
+add_filter( 'woocommerce_checkout_fields', function ( $fields ) {
+    $fields['billing']['billing_phone']['required'] = false;
+    $fields['order']['wd_delivery_note'] = array(
+        'type'     => 'textarea',
+        'label'    => __( 'Delivery note', 'wd' ),
+        'required' => false,
+        'priority' => 120,
+    );
+    return $fields;
+} );
+```
+
+<Callout type="warn">
+  `woocommerce_checkout_fields` and the address-field filters **do not run
+  under the Checkout Block.** For the Block, register an additional checkout
+  field with the Blocks field API, or add an inner block — see
+  [Blocks](/docs/development/blocks).
+  <VerifyNote>the current Blocks "additional checkout fields" registration
+  function name and signature for 11.0.1</VerifyNote>
+</Callout>
+
+## Validation
+
+<ClassicVsBlocks
+  classic="woocommerce_checkout_process (add wc_add_notice( …, 'error' ) to block submission) and woocommerce_after_checkout_validation ( $data, $errors — a WP_Error )."
+  blocks="Server: woocommerce_store_api_checkout_update_order_from_request and the Store API's own schema validation. Client: the wc/store/validation data store. The classic notices API is not used."
+/>
+
+<VerifyNote>confirm `woocommerce_checkout_process` and `woocommerce_after_checkout_validation` parameters, and the Store API validation hook names, for 11.0.1</VerifyNote>
+
+## Order creation
+
+<Lifecycle
+  steps={[
+    'WC_Checkout::create_order() builds a new WC_Order (status: pending)',
+    'woocommerce_checkout_create_order — set order-level data before first save (classic path)',
+    'Line items added from the cart: woocommerce_checkout_create_order_line_item per line',
+    'Shipping, fee, coupon, and tax items added',
+    'Customer billing/shipping copied onto the order',
+    'Order saved; woocommerce_checkout_order_created (and, classically, woocommerce_checkout_order_processed with the order ID)',
+  ]}
+  caption="Order creation from the cart. The per-item hooks are where you copy custom cart-item data onto the order."
+/>
+
+<WhereFrom
+  looking={<>A <strong>custom value chosen in the cart</strong> that needs to end up on the order and in emails.</>}
+  origin={<>Cart item data → copied to an order line item during <code>create_order()</code> → read back from the order item.</>}
+  controls={<>The per-line-item creation hook; the order-item meta.</>}
+  safe={<>On <code>woocommerce_checkout_create_order_line_item</code>, call <code>$item-&gt;add_meta_data( 'Engraving', $values['wd_engraving'] )</code>. Meta with a visible key shows on the order screen and emails automatically.</>}
+  avoid={<>Storing it as order <em>post</em> meta and hand-rendering it everywhere; storing it only in the session.</>}
+/>
+
+Under the Block, the equivalent server hook is
+`woocommerce_store_api_checkout_update_order_from_request`, plus the
+`ExtendSchema` update callback for data the Block collected.
+
+## Classic vs Blocks — summary
+
+| Concern | Classic | Checkout Block |
+| --- | --- | --- |
+| Render | `checkout/form-checkout.php` + template hooks | React, data from `wc/store/v1` |
+| Fields | `woocommerce_checkout_fields` | Blocks additional-fields API / inner blocks |
+| Validation | `woocommerce_checkout_process`, notices | Store API schema + `wc/store/validation` |
+| Order created | `woocommerce_checkout_order_processed` | `woocommerce_store_api_checkout_order_processed` |
+| Custom data in | `$_POST` on the checkout hooks | `ExtendSchema` update callback |
+
+Order-object hooks (`woocommerce_new_order`, `woocommerce_order_status_changed`,
+`woocommerce_thankyou`) fire on **both** paths.
+
+## Related
+
+<Cards>
+  <Card title="Orders" href="/docs/lifecycle/orders" description="The record checkout creates, and its lifecycle from there." />
+  <Card title="Payments" href="/docs/lifecycle/payments" description="What happens after the order is created." />
+  <Card title="Blocks" href="/docs/development/blocks" description="The Checkout Block extension APIs referenced above." />
+</Cards>

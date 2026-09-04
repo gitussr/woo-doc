@@ -56,20 +56,22 @@ source of truth for scope and sequencing.
 
 ## Next likely task
 
-Phase 2 (Foundations) is content-complete and through its accuracy pass.
+Phases 2 (Foundations) and 3 (Development toolkit) are content-complete and
+through their accuracy passes.
 
-Phase 3 (Development toolkit) is **content-complete and through its accuracy
-pass**: `content/docs/development/` has `hooks`, `filters`, `templates`,
-`shortcodes`, `blocks`, `ajax`, `rest-api`, `javascript`, wired into root
-`meta.json` after `foundations`. All `VerifyNote` tags resolved against
-WooCommerce 11.0.1 core source and developer docs (Sept 2026): `WC_AJAX`
-event list + single `wc_ajax_` hook, frontend script handles + localized
-params, `checkout.js` JS events, `WC_Shortcodes` registrations +
-`woocommerce_shortcode_products_query`, `wc_get_template` signature, Store API
-endpoint list + `Cart-Token`/`Nonce` headers, `ExtendSchema` helper shapes,
-Blocks Slot/Fill names + scope, `WC_Deprecated_*_Hooks`.
+Phase 4 (Commerce Lifecycle) content is **drafted**: `content/docs/lifecycle/`
+has `products`, `cart`, `checkout`, `orders`, `payments`, `shipping-and-tax`,
+`emails`, grouped under a "Commerce Lifecycle" folder and wired into root
+`meta.json` after `development`. IA tree + section reference updated.
+Remaining for Phase 4: the **accuracy pass** — ~26 `VerifyNote` tags across
+those 7 pages, to be resolved against WooCommerce 11.0.1 core source (totals
+pipeline class, order status slugs + transition/refund hooks, stock
+reserve/reduce hooks, tax table + rounding/calc hooks, shipping package/rate
+hooks, `WC_Payment_Gateway` + token classes + `wc-api` webhook mechanism,
+Blocks payment method API, email class ids + `*_notification` triggers +
+content hooks, block email editor flag).
 
-Next: Phase 4 (commerce lifecycle) — see roadmap.
+Then Phase 5 (data and storage — Database, HPOS) — see roadmap.
 
 Remaining `VerifyNote` tags elsewhere: `about/design-system.mdx` only, as
 intentional component demos.

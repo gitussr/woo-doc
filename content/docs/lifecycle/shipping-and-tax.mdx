@@ -1,0 +1,106 @@
+---
+title: Shipping & Tax
+description: The shipping and tax subsystems — shipping zones, methods and packages, how rates are produced and filtered, then tax classes, rates, the calculation, and where inclusive/exclusive pricing and rounding are decided.
+---
+
+<PageMeta priority="P1" audience="Intermediate → Advanced" />
+
+Shipping and tax are two stages of the [cart totals
+pipeline](/docs/lifecycle/cart#the-totals-calculation-pipeline). Both turn the
+cart plus the customer's address into money added to the order. They are
+grouped here because they interact — tax is calculated on shipping too.
+
+## Shipping
+
+### Zones, methods, packages
+
+<LayerStack
+  layers={[
+    { name: 'Shipping zone', note: 'a set of regions (countries / states / postcodes). The cart matches exactly one zone by the shipping address; unmatched carts fall to "Locations not covered by your other zones".' },
+    { name: 'Shipping method instance', note: 'a configured method within a zone — flat_rate, free_shipping, or local_pickup built in, plus extensions' },
+    { name: 'Package', note: 'the cart split into shippable groups (default: one package). woocommerce_cart_shipping_packages filters the split — e.g. per-vendor or per-warehouse.' },
+    { name: 'Rate', note: 'a WC_Shipping_Rate produced by each method for a package: id, label, cost, taxes' },
+  ]}
+/>
+
+<Lifecycle
+  steps={[
+    'Cart builds its shipping packages (woocommerce_cart_shipping_packages)',
+    'The customer\'s address selects a zone',
+    'Each method in that zone calculates a rate for each package (calculate_shipping())',
+    'woocommerce_package_rates filters the offered rates (hide, reprice, reorder)',
+    'The customer picks a rate; the choice is stored in the session',
+    'The chosen rate\'s cost enters the totals pipeline and is taxed',
+  ]}
+  caption="Address → zone → method → rate. The chosen rate becomes a shipping order item."
+/>
+
+<WhereFrom
+  looking={<>A <strong>shipping option</strong> you want to hide for certain carts.</>}
+  origin={<>A <code>WC_Shipping_Rate</code> produced by a method instance in the matched zone, passed through <code>woocommerce_package_rates</code>.</>}
+  controls={<>The zone/method config; the <code>woocommerce_package_rates</code> filter; the method's own settings.</>}
+  safe={<>Unset the rate in <code>woocommerce_package_rates</code> based on cart contents / customer; adjust <code>free_shipping</code>'s minimum via its settings or <code>woocommerce_shipping_free_shipping_is_available</code>.</>}
+  avoid={<>Hiding the rate only in the template — it is still selectable via the Store API and can be chosen.</>}
+/>
+
+<VerifyNote>confirm `woocommerce_cart_shipping_packages`, `woocommerce_package_rates`, and `WC_Shipping_Rate` for 11.0.1; add the classic vs Block shipping-selection difference</VerifyNote>
+
+### Adding a shipping method
+
+Extend `WC_Shipping_Method`, implement `calculate_shipping( $package )` calling
+`$this->add_rate( array( 'id' => …, 'label' => …, 'cost' => …, 'taxes' => … ) )`,
+and register via `woocommerce_shipping_methods`.
+
+## Tax
+
+### Classes and rates
+
+<LayerStack
+  layers={[
+    { name: 'Tax class', note: 'Standard, Reduced rate, Zero rate, plus custom. A product\'s _tax_class picks one; _tax_status (taxable / shipping / none) decides if it is taxed at all.' },
+    { name: 'Tax rate', note: 'a row: country, state, postcode, city, rate %, name, priority, compound, applies-to-shipping. Stored in the tax-rate tables, not options.' },
+    { name: 'Tax location', note: 'the address the rate is matched against — "Tax based on": shop base address, customer billing, or customer shipping (the default).' },
+  ]}
+/>
+
+<VerifyNote>confirm the tax-rate table names (`wp_woocommerce_tax_rates`, `wp_woocommerce_tax_rate_locations`) and the `woocommerce_tax_based_on` option values for 11.0.1</VerifyNote>
+
+### The calculation
+
+<Lifecycle
+  steps={[
+    'For each line, fee, and the shipping total: find the product\'s tax class and status',
+    'Match tax rates for that class against the tax location',
+    'WC_Tax::calc_tax() applies matched rates (compound rates stack on top of prior tax)',
+    'Rounding: per the "round at subtotal level" setting — either each line is rounded then summed, or the untotalled tax is summed then rounded once',
+    'If prices are entered inclusive of tax, the tax is first extracted from the displayed price',
+  ]}
+  caption="Tax is computed on lines, fees, and shipping separately, then rounded per the store's rounding mode."
+/>
+
+<Callout type="warn">
+  **Prices entered with or without tax** (`woocommerce_prices_include_tax`) is
+  a store-wide decision that changes how every price is interpreted. Combined
+  with "display prices in shop/cart including or excluding tax", it is the
+  source of most "the total is off by a cent" reports. Changing it on a live
+  store re-interprets every existing price.
+</Callout>
+
+<VerifyNote>confirm `WC_Tax::calc_tax()`, the rounding-mode option (`woocommerce_tax_round_at_subtotal`), and the `woocommerce_calc_tax` / `woocommerce_matched_tax_rates` filter names for 11.0.1</VerifyNote>
+
+### Where tax display is decided
+
+| Setting | Controls |
+| --- | --- |
+| Prices entered inclusive/exclusive | How stored prices are read |
+| Display in shop | Whether catalog prices show inc/exc tax |
+| Display during cart/checkout | Whether cart totals show inc/exc tax |
+| Price display suffix | The "(incl. VAT)" style text after a price |
+
+## Related
+
+<Cards>
+  <Card title="Cart" href="/docs/lifecycle/cart" description="The totals pipeline these two stages plug into." />
+  <Card title="Orders" href="/docs/lifecycle/orders" description="Shipping and tax become order items." />
+  <Card title="Checkout" href="/docs/lifecycle/checkout" description="Where the address that drives zone and tax matching is captured." />
+</Cards>

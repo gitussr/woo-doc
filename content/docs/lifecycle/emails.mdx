@@ -1,0 +1,105 @@
+---
+title: Emails
+description: The transactional email subsystem — the WC_Emails registry and WC_Email base class, the built-in emails and what triggers each, the template and styling layers, the main customization hooks, and the Block-based email editor.
+---
+
+<PageMeta priority="P1" audience="Intermediate → Advanced" />
+
+WooCommerce sends transactional email itself — one class per email type,
+triggered by [order status transitions](/docs/lifecycle/orders#the-transition-hook-family)
+and a few account events. This page is the structure and the hooks; it does
+not cover deliverability (SMTP, SPF/DKIM), which is a hosting concern.
+
+## The registry
+
+<LayerStack
+  layers={[
+    { name: 'WC_Emails', note: 'the singleton registry (WC()->mailer()). Loads the email classes and wires each one\'s trigger.' },
+    { name: 'WC_Email (abstract)', note: 'base class: settings, recipient, subject/heading, template paths, is_enabled(), send(), and trigger()' },
+    { name: 'Individual email classes', note: 'WC_Email_New_Order, WC_Email_Customer_Processing_Order, … — each defines its id, default recipient, templates, and what event calls trigger()' },
+  ]}
+/>
+
+The class list is filterable:
+
+```php
+add_filter( 'woocommerce_email_classes', function ( $emails ) {
+    $emails['WD_Email_Backorder'] = include __DIR__ . '/class-wd-email-backorder.php';
+    return $emails;
+} );
+```
+
+## Built-in emails and their triggers
+
+| Email (id) | Sent to | Triggered by |
+| --- | --- | --- |
+| New order (`new_order`) | Admin | Order enters `processing` (and other paid statuses) |
+| Cancelled order (`cancelled_order`) | Admin | Order → `cancelled` |
+| Failed order (`failed_order`) | Admin | Order → `failed` |
+| Processing order (`customer_processing_order`) | Customer | Order → `processing` |
+| Completed order (`customer_completed_order`) | Customer | Order → `completed` |
+| Refunded order (`customer_refunded_order`) | Customer | Order refunded (full or partial) |
+| Order on-hold (`customer_on_hold_order`) | Customer | Order → `on-hold` |
+| Invoice / order details (`customer_invoice`) | Customer | Sent manually from the order screen (also used for pending-payment) |
+| Customer note (`customer_note`) | Customer | `$order->add_order_note( $text, true )` |
+| Reset password (`customer_reset_password`) | Customer | Password reset request |
+| New account (`customer_new_account`) | Customer | Account created |
+
+<VerifyNote>confirm the email ids, default recipients, and the exact `*_notification` trigger hooks each class registers for 11.0.1</VerifyNote>
+
+<WhereFrom
+  looking={<>The <strong>"Your order is now processing"</strong> email.</>}
+  origin={<><code>WC_Email_Customer_Processing_Order</code>. Its <code>trigger()</code> is hooked to the <code>woocommerce_order_status_pending_to_processing_notification</code> (and <code>_failed_to_processing_</code>, …) actions by <code>WC_Emails::init_transactional_emails()</code>.</>}
+  controls={<>The email's enabled toggle and settings; the templates it renders; the <code>woocommerce_email_recipient_customer_processing_order</code> filter; the trigger hooks.</>}
+  safe={<>Change wording via the template override or the content-block hooks; change the recipient via the <code>woocommerce_email_recipient_&lt;id&gt;</code> filter; add content via <code>woocommerce_email_before_order_table</code> / <code>_after_order_table</code>.</>}
+  avoid={<>Editing the email class in the plugin directory; disabling it by removing the trigger action instead of the setting.</>}
+/>
+
+## The template and styling layers
+
+<LayerStack
+  layers={[
+    { name: 'emails/email-header.php / email-footer.php', note: 'the wrapper around every email' },
+    { name: 'emails/email-styles.php', note: 'the inlined CSS (WooCommerce inlines it into style attributes for client support)' },
+    { name: 'emails/<email-id>.php and emails/plain/<email-id>.php', note: 'the body — HTML and plain-text variants' },
+    { name: 'emails/email-order-details.php, email-addresses.php, email-customer-details.php', note: 'shared partials, with $order, $sent_to_admin, $plain_text, $email in scope' },
+  ]}
+/>
+
+Override any of these via the theme's `woocommerce/emails/` folder, exactly as
+for [storefront templates](/docs/development/templates). The header image and
+accent colour are settings, not template edits
+(`woocommerce_email_header_image`, `woocommerce_email_base_color`, …).
+
+## The main hooks
+
+| Hook | Use |
+| --- | --- |
+| `woocommerce_email_classes` | Register a custom email |
+| `woocommerce_email_recipient_<id>` | Change who an email goes to |
+| `woocommerce_email_subject_<id>` / `woocommerce_email_heading_<id>` | Change subject / heading |
+| `woocommerce_email_before_order_table` / `woocommerce_email_after_order_table` | Inject content around the order summary |
+| `woocommerce_email_order_meta` | Add rows after the order table |
+| `woocommerce_email_headers` | Add CC/BCC or custom headers |
+| `woocommerce_mail_content` | Filter the final rendered HTML |
+
+<VerifyNote>confirm these hook names and parameters for 11.0.1</VerifyNote>
+
+## The Block email editor
+
+<VersionNote version="WooCommerce 11.0">
+  WooCommerce 11.0 ships an **experimental block-based email editor** alongside
+  the classic per-email settings. Where enabled, email bodies are edited as
+  blocks rather than by overriding PHP templates. Treat it as unstable and
+  keep template overrides as the supported path for now.
+  <VerifyNote>the feature flag / settings location for the block email editor
+  in 11.0.1</VerifyNote>
+</VersionNote>
+
+## Related
+
+<Cards>
+  <Card title="Orders" href="/docs/lifecycle/orders" description="The status transitions that trigger each email." />
+  <Card title="Templates" href="/docs/development/templates" description="The override mechanism the email templates use." />
+  <Card title="Checkout" href="/docs/lifecycle/checkout" description="Where custom order data that should appear in emails is attached." />
+</Cards>

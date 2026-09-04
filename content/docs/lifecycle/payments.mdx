@@ -1,0 +1,132 @@
+---
+title: Payments
+description: The payment subsystem — the WC_Payment_Gateway interface, the process_payment contract, redirect vs direct gateways, webhooks/IPN and the WC API endpoint, marking an order paid, saved payment methods (tokenization), and the Blocks payment method API.
+---
+
+<PageMeta priority="P1" audience="Advanced" />
+
+A payment gateway is an adapter between WooCommerce's order and an external
+payment processor. WooCommerce defines the interface; the gateway implements
+`process_payment()` and, usually, a webhook handler. This page is the shape of
+that interface, not a guide to any one processor.
+
+## The gateway interface
+
+A gateway extends `WC_Payment_Gateway` and is registered via the
+`woocommerce_payment_gateways` filter.
+
+<LayerStack
+  layers={[
+    { name: 'id, title, description, method_title', note: 'identity and admin/checkout labels' },
+    { name: 'init_form_fields() / init_settings()', note: 'the settings screen under WooCommerce → Settings → Payments' },
+    { name: 'is_available()', note: 'whether to offer this gateway for the current cart/customer (also filterable via woocommerce_available_payment_gateways)' },
+    { name: 'payment_fields()', note: 'what renders in the checkout payment area (card form, redirect notice, …)' },
+    { name: 'validate_fields()', note: 'client-submitted payment field validation' },
+    { name: 'process_payment( $order_id )', note: 'the core method — take payment (or start the redirect) and return a result array' },
+    { name: 'supports[]', note: 'capability flags: products, refunds, tokenization, subscriptions, …' },
+  ]}
+/>
+
+## The `process_payment()` contract
+
+```php
+public function process_payment( $order_id ) {
+    $order = wc_get_order( $order_id );
+
+    // …talk to the processor…
+
+    if ( $success ) {
+        $order->payment_complete( $transaction_id ); // pending → processing/completed
+        WC()->cart->empty_cart();
+        return array(
+            'result'   => 'success',
+            'redirect' => $this->get_return_url( $order ), // the order-received page
+        );
+    }
+
+    wc_add_notice( __( 'Payment failed.', 'wd' ), 'error' );
+    return array( 'result' => 'failure' );
+}
+```
+
+<VerifyNote>confirm the `process_payment()` return-array keys and the `payment_complete()` / `get_return_url()` behavior for 11.0.1</VerifyNote>
+
+## Redirect vs direct
+
+<DecisionGuide>
+  <Choice when="the processor hosts the payment page">
+    `process_payment()` returns a `redirect` to the processor. The customer
+    pays off-site and is sent back to a return URL. The order is confirmed
+    from the **webhook**, not the browser return (the customer may never come
+    back).
+  </Choice>
+  <Choice when="payment is tokenized client-side (e.g. card fields → token)">
+    The token is submitted with the order; `process_payment()` charges it
+    server-to-server and completes the order inline.
+  </Choice>
+</DecisionGuide>
+
+## Webhooks / IPN
+
+Asynchronous processor notifications ("this payment succeeded / was disputed /
+was refunded") arrive at a WooCommerce-provided URL:
+
+- `WC()->api_request_url( 'my_gateway' )` gives a clean endpoint
+  (`/wc-api/my_gateway/`); the `woocommerce_api_my_gateway` action fires when
+  it is hit.
+- The handler must **verify the signature**, look the order up, and move it
+  (`payment_complete()`, `update_status( 'failed' )`, `$order->add_order_note()`).
+
+<SafetyLevel level="dangerous">
+  A webhook endpoint with no signature verification lets anyone mark any order
+  paid. Verify the processor's signature on every call, and treat the payload
+  as untrusted input.
+</SafetyLevel>
+
+<VerifyNote>confirm the `wc-api` / `WC_API` request URL mechanism and the `woocommerce_api_<id>` hook name for 11.0.1 (vs. registering a REST route)</VerifyNote>
+
+## Marking an order paid
+
+`$order->payment_complete( $txn_id )` is the single entry point:
+
+<Lifecycle
+  steps={[
+    'Sets the transaction ID and paid date',
+    'Moves the order to processing (or completed for downloads-only), via the woocommerce_payment_complete_order_status filter',
+    'Fires woocommerce_payment_complete',
+    'Downstream: stock reduction, downloadable access, the processing/completed email',
+  ]}
+  caption="Always call payment_complete() rather than setting the status directly — the side effects are attached to it."
+/>
+
+## Saved payment methods (tokenization)
+
+| Piece | Role |
+| --- | --- |
+| `WC_Payment_Token` (+ `WC_Payment_Token_CC`, `_eCheck`) | A stored reference to a payment method — never raw card data |
+| `WC_Payment_Tokens` | Query/store API: `get_customer_tokens()`, `get()`, `set_users_default()` |
+| `$gateway->supports( 'tokenization' )` | Enables the "save method" checkbox and the saved-methods list at checkout |
+
+The processor holds the sensitive data; WooCommerce stores only its token.
+This keeps most stores out of PCI-DSS scope for card data.
+
+<VerifyNote>confirm the `WC_Payment_Token*` class names and the `woocommerce_payment_tokens` table for 11.0.1</VerifyNote>
+
+## Blocks
+
+The Checkout Block does not call `payment_fields()`. A gateway registers a
+**payment method integration** for the Block separately — a JS module
+implementing the payment method interface (`name`, `content`, `edit`,
+`canMakePayment`, `ariaLabel`, `supports`) registered with
+`registerPaymentMethod()` / `registerExpressPaymentMethod()`, backed by a PHP
+`AbstractPaymentMethodType`.
+
+<VerifyNote>confirm `registerPaymentMethod` / `AbstractPaymentMethodType` names and the registration hook (`woocommerce_blocks_payment_method_type_registration`) for 11.0.1</VerifyNote>
+
+## Related
+
+<Cards>
+  <Card title="Orders" href="/docs/lifecycle/orders" description="The status transitions payment_complete() drives." />
+  <Card title="Checkout" href="/docs/lifecycle/checkout" description="Where process_payment() is called from." />
+  <Card title="REST API" href="/docs/development/rest-api" description="The wc-api endpoint mechanism used for webhooks." />
+</Cards>
