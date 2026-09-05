@@ -31,7 +31,18 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
       suppressHydrationWarning
     >
       <body className="flex min-h-screen flex-col" suppressHydrationWarning>
-        <RootProvider>{children}</RootProvider>
+        <RootProvider
+          search={{
+            options: {
+              type: 'static',
+              // The exported index lives under the basePath (e.g. on
+              // GitHub Pages); locally/normally basePath is empty.
+              api: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/api/search`,
+            },
+          }}
+        >
+          {children}
+        </RootProvider>
       </body>
     </html>
   );
