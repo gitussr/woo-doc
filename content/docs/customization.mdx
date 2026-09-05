@@ -86,7 +86,13 @@ the one WooDoc recommends and why.
 | "Add a field to the checkout" on a **Blocks** store via a classic template override | Does nothing — the Block does not render that template | **Dangerous** — wrong mechanism entirely, ships broken |
 | Patch a bug by editing `wp-content/plugins/woocommerce/…` directly | None — edit core | **Dangerous** — reverted on the next update |
 
-<VerifyNote>confirm `woocommerce_product_options_general_product_data` / `woocommerce_process_product_meta` are still the current hook pair for adding a simple-product admin field in 11.0.1 (vs. newer block-based product-editor equivalents)</VerifyNote>
+<Callout type="warn">
+  Inside a `woocommerce_process_product_meta` callback, save through
+  `$product->update_meta_data( $key, $value ); $product->save();` — never a
+  direct `update_post_meta()` call. The CRUD save is what keeps the value
+  correct if the product data model changes; going straight to postmeta
+  bypasses it.
+</Callout>
 
 <Callout type="info">
   Every row above is really the same question from

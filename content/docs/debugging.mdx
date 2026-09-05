@@ -28,7 +28,14 @@ $logger->debug( 'Reached payment step with total ' . $order->get_total(), [ 'sou
   avoid={<>Logging full request payloads or payment details — a log file is not a secure place for card numbers, tokens, or full customer PII. See <a href="/docs/security#payment-data-boundaries">Security</a>.</>}
 />
 
-<VerifyNote>confirm current log rotation/retention behavior (file size cap and cleanup schedule) for `WC_Log_Handler_File` in 11.0.1</VerifyNote>
+<Callout type="info">
+  `WC_Log_Handler_File` rotates a source's log file once it passes **5 MB**:
+  the current file is renumbered `.0`, existing numbered files shift up, and
+  the oldest (`.9`) is deleted — up to 10 historical files plus the current
+  one. Rotation is size-based, not scheduled; nothing deletes old logs by
+  age automatically (`WC_Log_Handler_File::delete_logs_before_timestamp()`
+  exists for that, but has to be called explicitly, e.g. from a cron task).
+</Callout>
 
 ## The status report
 

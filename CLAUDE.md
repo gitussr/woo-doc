@@ -94,27 +94,32 @@ cleanup` is a separate explicit step, and even then a `shop_order_placehold`
 placeholder post is kept per order. No open `VerifyNote` tags remain in
 `content/docs/data-storage/`.
 
-Phase 6 (Customization, debugging, operations) content is **drafted**: four
-flat pages at `content/docs/customization.mdx`, `debugging.mdx`,
-`performance.mdx`, `security.mdx` (matching the flat, non-grouped shape these
-four have in the IA tree — unlike Commerce Lifecycle / Data & Storage, they
-are not a folder), wired into root `meta.json` after `data-storage`. IA
-"How this maps to the current site" updated. Each page is written as the
-*applied* companion to material Development/Foundations/Lifecycle/Data &
-Storage already document in depth — it links out rather than repeating
-mechanics (e.g. hook-tracing lives on `development/hooks.mdx`, cart-fragment
-cost on `development/javascript.mdx`, nonce mechanics on
-`development/ajax.mdx`) — per the IA's "does not belong here" notes for each
-section. 5 `VerifyNote` tags remain, one or two per page: the current
-simple-product admin-field hook pair (`customization.mdx`), `WC_Log_Handler_File`
-rotation/retention behavior (`debugging.mdx`), the Store API `Cart-Token`
-format/expiry (`performance.mdx`), and the current Shop-Manager capability
-list plus `WC_Privacy` eraser/exporter hook names (`security.mdx`).
+Phase 6 (Customization, debugging, operations) is **content-complete and
+through its accuracy pass**: four flat pages at
+`content/docs/customization.mdx`, `debugging.mdx`, `performance.mdx`,
+`security.mdx` (matching the flat, non-grouped shape these four have in the
+IA tree — unlike Commerce Lifecycle / Data & Storage, they are not a
+folder), wired into root `meta.json` after `data-storage`. IA "How this maps
+to the current site" updated. Each page is written as the *applied*
+companion to material Development/Foundations/Lifecycle/Data & Storage
+already document in depth — it links out rather than repeating mechanics
+(e.g. hook-tracing lives on `development/hooks.mdx`, cart-fragment cost on
+`development/javascript.mdx`, nonce mechanics on `development/ajax.mdx`) —
+per the IA's "does not belong here" notes for each section. All 5
+`VerifyNote` tags resolved against WooCommerce 11.0.1 core source /
+developer docs (Sept 2026): `woocommerce_product_options_general_product_data`
++ `woocommerce_process_product_meta` confirmed current, `WC_Log_Handler_File`
+5 MB size-based rotation (10 historical files, `delete_logs_before_timestamp()`
+for manual age-based cleanup), Store API `Cart-Token` as an HS256 JWT
+(`JsonWebToken`, `wp_salt()`-derived secret, `exp` = issue + `DAY_IN_SECONDS *
+2`, filterable via `wc_session_expiration`), `WC_Install::create_roles()`
+Shop Manager capability set (no HPOS-specific capability — storage mode is a
+feature flag, not role-gated), and `WC_Privacy`'s `register_erasers_exporters()`
+on `init` with its four exporter/eraser ids. No open `VerifyNote` tags
+remain outside `about/design-system.mdx`.
 
-Next: finish the Phase 6 accuracy pass (resolve those 5 `VerifyNote` tags
-against WooCommerce 11.0.1 core source / developer docs), then Phase 7
-(honesty and depth — Limitations, advanced topics, diagram pass) — see
-roadmap.
+Next: Phase 7 (honesty and depth — Limitations, advanced topics, diagram
+pass) — see roadmap.
 
 Remaining `VerifyNote` tags elsewhere: `about/design-system.mdx` only, as
 intentional component demos.

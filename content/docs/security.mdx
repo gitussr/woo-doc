@@ -46,7 +46,17 @@ Relevant built-in capabilities:
 | `edit_shop_orders` / `edit_shop_order` | View/edit orders in bulk, or one specific order |
 | `edit_others_shop_orders` | Edit orders not created by the current user (relevant for a multi-staff setup) |
 
-<VerifyNote>confirm the full current capability list (including HPOS-era additions, if any) registered by WooCommerce 11.0.1 for the Shop Manager role vs. custom-order-table access</VerifyNote>
+<Callout type="info">
+  `WC_Install::create_roles()` grants the **Shop Manager** role
+  `manage_woocommerce`, `view_woocommerce_reports`, `create_customers`, a set
+  of baseline WordPress editor-level capabilities, and — for each of
+  `product`, `shop_order`, and `shop_coupon` — the full standard post-type
+  capability set (`edit_/read_/delete_<type>`, `edit_others_<type>s`,
+  `publish_<type>s`, and the rest). There is **no separate capability for
+  HPOS or the custom order tables** — a store's storage mode is a feature
+  flag, not something role-gated, so anyone with the `shop_order`
+  capabilities above has the same order access whichever mode is active.
+</Callout>
 
 The mechanics of nonces on WooCommerce's own AJAX transports (`wc-ajax` and
 `admin-ajax`) are covered in full on
@@ -68,7 +78,17 @@ reinventing them:
   avoid={<>Adding custom PII to order/customer meta with no matching eraser — a fulfilled erasure request then leaves your plugin's data behind, silently.</>}
 />
 
-<VerifyNote>confirm the exact current hook/filter names and class methods `WC_Privacy` registers erasers/exporters through in 11.0.1 (API may have shifted since the 3.4 GDPR feature introduction)</VerifyNote>
+<Callout type="info">
+  `WC_Privacy`'s constructor hooks `register_erasers_exporters()` onto
+  WordPress `init`, which registers four exporter/eraser pairs — id
+  `woocommerce-customer-data` ("WooCommerce Customer Data"),
+  `woocommerce-customer-orders` ("WooCommerce Customer Orders"),
+  `woocommerce-customer-downloads` ("WooCommerce Customer Downloads"), and
+  `woocommerce-customer-tokens` ("WooCommerce Customer Payment Tokens") — each
+  backed by a callback on `WC_Privacy_Exporters` / `WC_Privacy_Erasers`. A
+  plugin follows the same shape: extend `WC_Abstract_Privacy` and call its
+  `add_exporter()` / `add_eraser()` for your own ids.
+</Callout>
 
 ## Payment-data boundaries
 

@@ -85,13 +85,17 @@ A headless build talks to WooCommerce entirely through the
 server-rendered page for it to refresh. The relevant costs shift to:
 
 - **Cart/session continuity** — the Store API identifies a cart by a
-  `Cart-Token` (JWT) rather than a PHP session cookie; the client is
-  responsible for persisting and resending it.
+  `Cart-Token`: an HS256 JWT (`Automattic\WooCommerce\StoreApi\Utilities\JsonWebToken`),
+  signed with a secret derived from `wp_salt()`, carrying the customer/session
+  id and an `exp` claim set to issue time + `DAY_IN_SECONDS * 2` (48 hours,
+  filterable via `wc_session_expiration`) — rather than a PHP session cookie.
+  The client is responsible for persisting it and resending it as the
+  `Cart-Token` request header on every call; there is no separate refresh
+  endpoint, so a headless client needs to fetch a fresh cart (and token)
+  once the old one expires.
 - **No fragment cache to lean on** — every cart/checkout render is a fresh
   API call; caching strategy has to be built into the headless front end
   itself rather than inherited from server-rendered fragments.
-
-<VerifyNote>confirm whether the Store API's Cart-Token is a signed JWT (vs. an opaque session key) and its exact expiry/refresh behavior in 11.0.1</VerifyNote>
 
 ## Related
 
