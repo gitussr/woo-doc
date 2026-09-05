@@ -2,9 +2,8 @@ import type { ToolContext } from './types';
 
 /**
  * WooCommerce 11.0.1 core source (wc-template-hooks.php /
- * wc-template-functions.php) for hook names and priorities. Two claims not
- * yet checked against core carry a `verify` note and render <VerifyNote>,
- * per WooDoc's accuracy policy — see CLAUDE.md.
+ * wc-template-functions.php / the templates/ files referenced below) for
+ * every hook name, priority, template path, and filter signature here.
  */
 const SINGLE_PRODUCT_CONTEXT: ToolContext = {
   id: 'single-product',
@@ -16,12 +15,12 @@ const SINGLE_PRODUCT_CONTEXT: ToolContext = {
       label: 'Sale Badge',
       description: 'The "Sale!" flash shown on discounted products.',
       hook: { name: 'woocommerce_before_single_product_summary', type: 'action', priority: 10 },
+      templatePath: 'loop/sale-flash.php',
       recommendedMechanism: 'filter',
       filterName: 'woocommerce_sale_flash',
       codeExample: `add_filter( 'woocommerce_sale_flash', function ( $html, $post, $product ) {
     return '<span class="onsale">Deal!</span>';
 }, 10, 3 );`,
-      verify: 'confirm the woocommerce_sale_flash filter signature is still current in 11.0.1',
       docHref: '/docs/foundations/extension-model',
     },
     {
@@ -110,13 +109,20 @@ function my_custom_summary_row() {
           label: 'Add to Cart',
           description: 'The quantity input and Add to Cart button.',
           hook: { name: 'woocommerce_single_product_summary', type: 'action', priority: 30 },
-          recommendedMechanism: 'action',
-          codeExample: `add_action( 'woocommerce_simple_add_to_cart', 'woocommerce_simple_add_to_cart' ); // core default for simple products`,
+          recommendedMechanism: 'template-override',
+          codeExample: `// woocommerce_template_single_add_to_cart() fires do_action( 'woocommerce_' . $product->get_type() . '_add_to_cart' ),
+// which core hooks (at priority 30) to a same-named function per type:
+//
+//   simple    -> single-product/add-to-cart/simple.php
+//   grouped   -> single-product/add-to-cart/grouped.php
+//   variable  -> single-product/add-to-cart/variable.php
+//   external  -> single-product/add-to-cart/external.php
+//
+// yourtheme/woocommerce/single-product/add-to-cart/simple.php`,
           warning: {
             level: 'risky',
-            text: 'This callback does not call wc_get_template() itself — it fires a per-product-type action (woocommerce_simple_add_to_cart for simple products; other types follow the same woocommerce_{type}_add_to_cart pattern). There is no single template to override here.',
+            text: 'There is no single "add to cart" template — the product type decides which of the four templates above actually renders. Override the one matching the product type you are changing, not single-product/add-to-cart/simple.php by default.',
           },
-          verify: 'confirm the exact add-to-cart template/hook chain for grouped, variable, and external product types',
           docHref: '/docs/lifecycle/products',
         },
         {

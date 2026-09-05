@@ -96,12 +96,17 @@ utilities embedded in the site (`/tools`), not MDX content. Architecture:
 click through its component tree, see the hook/priority/template/filter
 that renders each piece and the recommended extension mechanism. Ships one
 context (Single Product), seeded from verified WooCommerce 11.0.1 core
-source (`wc-template-hooks.php` / `wc-template-functions.php`). Two claims
-are still `verify`-flagged: the `woocommerce_sale_flash` filter signature,
-and the exact add-to-cart template/hook chain for grouped/variable/external
-product types (only "simple" is verified). `/tools` lists two more contexts
-as `status: 'planned'` (Hook Explorer, Product Query Builder) — data only,
-not built.
+source (`wc-template-hooks.php` / `wc-template-functions.php` / the
+`templates/` files themselves). **No open `verify` flags remain** — the two
+from the initial ship are resolved: `woocommerce_sale_flash` fires from
+`templates/loop/sale-flash.php` as `apply_filters( 'woocommerce_sale_flash',
+$html, $post, $product )`; the add-to-cart node fires
+`woocommerce_{type}_add_to_cart` (priority 30) to a same-named function per
+type, each loading its own template — `single-product/add-to-cart/{simple,
+grouped,variable,external}.php` — so its recommended mechanism is now
+`template-override` (pick the file matching the product type), not a plain
+action example. `/tools` lists two more contexts as `status: 'planned'`
+(Hook Explorer, Product Query Builder) — data only, not built.
 
 Full architecture spec: `Downloads/WooDoc — Interactive Developer Tools
 Architecture Prompt.md` (the user's brief). Roadmap beyond the Template
@@ -175,9 +180,9 @@ on `init` with its four exporter/eraser ids. No open `VerifyNote` tags
 remain outside `about/design-system.mdx`.
 
 Next: Phase 7 (honesty and depth — Limitations, advanced topics, diagram
-pass) — see roadmap. Separately, on the Tools track: an accuracy pass on the
-Template Visualizer's 2 remaining `verify` flags, then the Cart context (see
-"WooDoc Tools" above).
+pass) — see roadmap. Separately, on the Tools track: the Template
+Visualizer's accuracy pass is done (see "WooDoc Tools" above); next up there
+is a Cart context, once it gets its own hook/template verification pass.
 
 Remaining `VerifyNote` tags elsewhere: `about/design-system.mdx` only, as
 intentional component demos.
