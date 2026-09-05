@@ -20,10 +20,16 @@ source of truth for scope and sequencing.
   `search.options.type: 'static'` in `app/layout.tsx`) so it works both
   normally and under a static export.
 - Content lives in `content/docs/**.mdx`; ordering in `meta.json` per folder.
-- **Deployment:** `.github/workflows/deploy-pages.yml` builds with
-  `GITHUB_PAGES=true` (→ `output: 'export'`, `basePath: '/woo-doc'` in
-  `next.config.mjs`) and publishes to GitHub Pages on every push to `main`.
-  Live at `https://gitussr.github.io/woo-doc/`. Local dev/build/start are
+- **Deployment:** GitHub Pages, classic branch source (not Actions — the gh
+  CLI token here lacks the `workflow` scope needed to push
+  `.github/workflows/*`). `npm run deploy:pages`
+  (`scripts/deploy-gh-pages.sh`) builds with `GITHUB_PAGES=true` (→
+  `output: 'export'`, `basePath: '/woo-doc'` in `next.config.mjs`), syncs
+  `out/` into a `gh-pages` branch via a worktree at
+  `.git/gh-pages-worktree`, and pushes it — GitHub Pages serves that branch
+  directly. **Deploys are not automatic on push to `main`**; re-run the
+  script whenever `main` should go live. Live at
+  `https://gitussr.github.io/woo-doc/`. Local dev/build/start are
   unaffected — `GITHUB_PAGES` is unset there, so no basePath and a normal
   Next.js server.
 

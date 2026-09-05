@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "deploy:pages": "bash scripts/deploy-gh-pages.sh"
   },
   "dependencies": {
     "@types/mdx": "^2.0.14",
