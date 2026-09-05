@@ -68,6 +68,48 @@ source of truth for scope and sequencing.
   `--woo-safe`, `--woo-caution`, `--woo-danger`, `--woo-info`.
 - Palette only — keep WooDoc's own name, logo mark, copy, and components.
 
+## WooDoc Tools
+
+A parallel track alongside the content phases below: interactive developer
+utilities embedded in the site (`/tools`), not MDX content. Architecture:
+
+- `lib/tools/types.ts` — shared `TemplateNode`/`ToolContext` shapes a tool's
+  data module is built from.
+- `lib/tools/registry.ts` — the `TOOLS` array driving the `/tools` index
+  card grid. Adding a future tool is an entry here plus its own data module
+  and page, not a rewrite.
+- `components/tools/tool-shell.tsx` — `ToolShell`/`ToolSection`, the
+  reusable Title → Configuration → Result → Why → Code → Warnings → Related
+  page shape every tool uses.
+- `components/tools/node-detail.tsx` — renders Why/Code/Warnings/Related for
+  one node by **reusing** `WhereFrom`/`SafetyLevel`/`VerifyNote` from
+  `components/woodoc.tsx` rather than inventing new visual language for
+  tools. The same accuracy policy below applies here: an unverified claim in
+  tool data gets a `verify` field, rendered as `<VerifyNote>`.
+- Pages live under `app/(home)/tools/**` (inherits `HomeLayout` for free —
+  do not add a tools-specific layout or route them through the docs
+  `source`/`loader`).
+
+**First tool — WooCommerce Template Visualizer** (`/tools/template-visualizer`,
+`components/tools/template-visualizer.tsx` +
+`lib/tools/template-visualizer-data.ts`): pick a WooCommerce page context,
+click through its component tree, see the hook/priority/template/filter
+that renders each piece and the recommended extension mechanism. Ships one
+context (Single Product), seeded from verified WooCommerce 11.0.1 core
+source (`wc-template-hooks.php` / `wc-template-functions.php`). Two claims
+are still `verify`-flagged: the `woocommerce_sale_flash` filter signature,
+and the exact add-to-cart template/hook chain for grouped/variable/external
+product types (only "simple" is verified). `/tools` lists two more contexts
+as `status: 'planned'` (Hook Explorer, Product Query Builder) — data only,
+not built.
+
+Full architecture spec: `Downloads/WooDoc — Interactive Developer Tools
+Architecture Prompt.md` (the user's brief). Roadmap beyond the Template
+Visualizer, per that brief: a Cart context for this same tool (needs its own
+hook/template verification pass — the repo's existing Cart content covers
+totals/session internals, not the cart page's hook map), then Hook Explorer,
+Query Builder, and the lifecycle visualizers, each its own increment.
+
 ## Next likely task
 
 Phases 2 (Foundations) and 3 (Development toolkit) are content-complete and
@@ -133,7 +175,9 @@ on `init` with its four exporter/eraser ids. No open `VerifyNote` tags
 remain outside `about/design-system.mdx`.
 
 Next: Phase 7 (honesty and depth — Limitations, advanced topics, diagram
-pass) — see roadmap.
+pass) — see roadmap. Separately, on the Tools track: an accuracy pass on the
+Template Visualizer's 2 remaining `verify` flags, then the Cart context (see
+"WooDoc Tools" above).
 
 Remaining `VerifyNote` tags elsewhere: `about/design-system.mdx` only, as
 intentional component demos.

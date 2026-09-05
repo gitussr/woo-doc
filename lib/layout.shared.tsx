@@ -24,6 +24,11 @@ export function baseOptions(): BaseLayoutProps {
         url: '/docs',
         active: 'nested-url',
       },
+      {
+        text: 'Tools',
+        url: '/tools',
+        active: 'nested-url',
+      },
     ],
   };
 }
