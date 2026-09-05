@@ -77,18 +77,29 @@ shipping package/rate filters + classic-vs-Block selection, `WC_Payment_*` +
 `woocommerce_register_additional_checkout_field`. No open `VerifyNote` tags
 remain in `content/docs/lifecycle/`.
 
-Phase 5 (Data and Storage) content is **drafted**: `content/docs/data-storage/`
-has `database` (P2 concept), `hpos` (P1 concept), `schema-reference` (P4 full
-column listing), grouped under a "Data & Storage" folder and wired into root
-`meta.json` after `lifecycle`. IA tree + section reference updated. Table/
-column data was pulled directly from `WC_Install::get_schema()` and the HPOS
-column-mapping constants in 11.0.1 core source, so almost everything is
-already accurate — only **one** `VerifyNote` remains (the HPOS migration
-controller class/CLI and whether legacy post rows are retained after
-migration), in `data-storage/hpos.mdx`.
+Phase 5 (Data and Storage) is **content-complete and through its accuracy
+pass**: `content/docs/data-storage/` has `database` (P2 concept), `hpos` (P1
+concept), `schema-reference` (P4 full column listing), grouped under a "Data &
+Storage" folder and wired into root `meta.json` after `lifecycle`. IA tree +
+section reference updated. Table/column data was pulled directly from
+`WC_Install::get_schema()` and the HPOS column-mapping constants in 11.0.1
+core source. The last open `VerifyNote` (HPOS migration controller/CLI and
+legacy-row retention) was resolved against WooCommerce developer docs +
+core source: migration/sync run internally via
+`Automattic\WooCommerce\Internal\DataStores\Orders\DataSynchronizer` +
+`PostsToOrdersMigrationController`, exposed as WP-CLI commands through
+`CLIRunner` under `wp wc hpos` (`sync`, `backfill`, `cleanup`); legacy
+`wp_posts`/`wp_postmeta` rows are **not** deleted automatically — `wp wc hpos
+cleanup` is a separate explicit step, and even then a `shop_order_placehold`
+placeholder post is kept per order. No open `VerifyNote` tags remain in
+`content/docs/data-storage/`.
 
-Next: finish that one-item Phase 5 accuracy pass, then Phase 6
-(customization, debugging, operations) — see roadmap.
+Next: Phase 6 (customization, debugging, operations) — see roadmap:
+customization patterns (template strategy, plugin vs mu-plugin vs child
+theme, Blocks customization), debugging (logging, status report, hook
+tracing, plugin-conflict isolation), performance (object caching, autoloaded
+options, query/fragment cost), security (nonces, capability checks, PII in
+orders, payment-data boundaries).
 
 Remaining `VerifyNote` tags elsewhere: `about/design-system.mdx` only, as
 intentional component demos.

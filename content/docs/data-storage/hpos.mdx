@@ -79,7 +79,24 @@ flag flip:
   caption="Migration runs in the background in batches — it is designed not to lock a live store with a large order history."
 />
 
-<VerifyNote>confirm the exact migration controller class/CLI command and whether legacy post rows are deleted or retained by default after migration completes in 11.0.1</VerifyNote>
+<Callout type="info">
+  Migration and ongoing sync are driven internally by
+  `Automattic\WooCommerce\Internal\DataStores\Orders\DataSynchronizer` (batched
+  via Action Scheduler) and `PostsToOrdersMigrationController`. The same
+  operations are exposed as WP-CLI commands through `CLIRunner`, under the
+  `wp wc hpos` namespace (the older `wp wc cot` namespace still works but is
+  deprecated): `wp wc hpos sync` migrates the currently-authoritative store to
+  the other one, and `wp wc hpos backfill` does the same with per-order /
+  per-field control — the practical choice for a large store where the
+  background batches are too slow.
+</Callout>
+
+Legacy `wp_posts` / `wp_postmeta` rows are **not** deleted automatically once
+HPOS becomes authoritative — migration only copies data forward. Deleting
+them is a separate, explicit step: `wp wc hpos cleanup` removes the legacy
+postmeta (and post rows) for orders already migrated, but even then it keeps
+a lightweight placeholder post (`shop_order_placehold`) per order so the
+store can still be switched back to legacy storage without re-migrating.
 
 <SafetyLevel level="recommended">
   On a store with a non-trivial order history, run the migration during low
