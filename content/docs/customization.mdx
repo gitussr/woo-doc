@@ -1,0 +1,116 @@
+---
+title: Customization
+description: Applied customization patterns that cut across subsystems — plugin vs mu-plugin vs child theme, Blocks customization worked end to end, and the safety-level framework applied to the requests developers actually get.
+---
+
+<PageMeta priority="P1" audience="Intermediate → Advanced" />
+
+[WooCommerce Extension Model](/docs/foundations/extension-model) is the map
+of the four mechanisms — actions, filters, template overrides, Blocks. This
+page is the applied companion: where the *code* that uses those mechanisms
+should live, how a Blocks customization actually plays out end to end, and a
+worked library of real requests mapped to a mechanism and a safety level.
+
+## Plugin vs. mu-plugin vs. child theme
+
+All three can hold the exact same `add_action()` / `add_filter()` call. The
+choice is about **lifecycle and ownership**, not capability.
+
+<DecisionGuide>
+  <Choice when="the code is commerce logic — pricing, checkout, orders, gateways, anything the store depends on">
+    A regular plugin. It shows up in **Plugins**, can be versioned and
+    updated independently of the theme, survives a theme change, and can use
+    activation/deactivation hooks to set up or clean up its own data.
+  </Choice>
+  <Choice when="the code must always run and must not be toggled off by a shop manager or an accidental deactivation">
+    A **must-use plugin** (a file dropped in `wp-content/mu-plugins/`).
+    WordPress loads every file there automatically, before regular plugins'
+    `plugins_loaded`, and it never appears in the deactivatable **Plugins**
+    list. Trade-off: no activation/deactivation hooks, no auto-updates, and
+    (native WordPress limitation) only files directly in `mu-plugins/` load —
+    a plugin that ships in its own subdirectory needs a one-line loader file
+    at the top level that `require`s it.
+  </Choice>
+  <Choice when="the code is presentation-only and conceptually part of this theme">
+    Child theme `functions.php`. Fine for things like enqueueing a stylesheet
+    tweak or adjusting an archive's column count. Not for anything the store
+    depends on functioning — a theme switch silently deletes it.
+  </Choice>
+  <Choice when="the change is a classic-template override">
+    It has one legal home regardless of the above: the child theme's
+    `woocommerce/` folder — see
+    [Templates](/docs/development/templates#overriding-a-template-in-a-theme).
+  </Choice>
+</DecisionGuide>
+
+<SafetyLevel level="recommended">
+  Default to a regular plugin. Reach for a mu-plugin only for the narrow case
+  of "this must never be off" — a compatibility declaration a client keeps
+  accidentally disabling, a security patch while a real fix ships, a hard
+  business rule. Everything else benefits from being deactivatable while you
+  debug it.
+</SafetyLevel>
+
+## A Blocks customization, worked end to end
+
+Adding a "gift note" field to checkout shows how the mechanisms in the
+[Blocks layer](/docs/foundations/extension-model#blocks--change-the-react-storefront)
+combine in practice — and how differently the same feature is built classic
+vs. Blocks:
+
+<ClassicVsBlocks
+  classic="Filter `woocommerce_checkout_fields` to add the field to the form, hook `woocommerce_checkout_create_order` to save the submitted value as order meta, hook `woocommerce_admin_order_data_after_billing_address` (or similar) to display it in the admin order screen."
+  blocks="Register an `IntegrationInterface` that adds a namespaced block to the Checkout Block via `woocommerce_blocks_checkout_block_registration`; the field itself renders through a Slot/Fill or a registered checkout block; on submit, the value reaches the server through `woocommerce_store_api_register_endpoint_data` / `_update_callback` rather than $_POST, and is saved onto the order the same way — as order meta."
+/>
+
+<SafetyLevel level="risky">
+  These are two separate implementations of the same feature. Supporting
+  both classic and Blocks checkout means shipping both code paths — there is
+  no filter that works on both. Check which one the store actually runs
+  before building either.
+</SafetyLevel>
+
+## Applied safety-level scenarios
+
+The same request can be reached at more than one mechanism; this table picks
+the one WooDoc recommends and why.
+
+| Request | Mechanism | Safety |
+| --- | --- | --- |
+| Change the "Add to cart" button text | Filter — `woocommerce_product_add_to_cart_text` (archive/loop) or `woocommerce_product_single_add_to_cart_text` (single product) | **Recommended** |
+| Add a custom field to the product admin screen | Action pair — `woocommerce_product_options_general_product_data` (render) + `woocommerce_process_product_meta` (save) | **Recommended** |
+| Hide a payment gateway for certain shipping zones/products | Filter — `woocommerce_available_payment_gateways` | **Recommended** |
+| Add a field to the classic checkout | Filter — `woocommerce_checkout_fields` | **Recommended** |
+| Add a field to the Checkout **Block** | Slot/Fill or a registered checkout block + Store API `ExtendSchema` — see above | **Recommended** (for Blocks) |
+| Restructure the cart page's markup beyond what hooks reach | Classic template override (`cart/cart.php`) | **Risky** — you now own a forked file |
+| "Add a field to the checkout" on a **Blocks** store via a classic template override | Does nothing — the Block does not render that template | **Dangerous** — wrong mechanism entirely, ships broken |
+| Patch a bug by editing `wp-content/plugins/woocommerce/…` directly | None — edit core | **Dangerous** — reverted on the next update |
+
+<VerifyNote>confirm `woocommerce_product_options_general_product_data` / `woocommerce_process_product_meta` are still the current hook pair for adding a simple-product admin field in 11.0.1 (vs. newer block-based product-editor equivalents)</VerifyNote>
+
+<Callout type="info">
+  Every row above is really the same question from
+  [Where Does This Come From?](/docs/introduction/where-does-this-come-from):
+  find the layer, pick the safest mechanism that layer exposes, and stop the
+  moment a filter or action reaches it.
+</Callout>
+
+## Related
+
+<Cards>
+  <Card
+    title="WooCommerce Extension Model"
+    href="/docs/foundations/extension-model"
+    description="The four mechanisms this page assumes — read that one first."
+  />
+  <Card
+    title="Templates"
+    href="/docs/development/templates"
+    description="The override mechanism referenced above, in depth."
+  />
+  <Card
+    title="Blocks"
+    href="/docs/development/blocks"
+    description="Slot/Fill, IntegrationInterface, and the Store API extension points."
+  />
+</Cards>

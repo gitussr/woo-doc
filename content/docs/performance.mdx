@@ -1,0 +1,114 @@
+---
+title: Performance
+description: Where WooCommerce spends time and how to reduce it — object caching and sessions, autoloaded options, query and fragment cost, extension overhead, and headless considerations.
+---
+
+<PageMeta priority="P2" audience="Advanced" />
+
+WooCommerce's performance story is mostly about **avoiding unindexed lookups
+and unnecessary per-request work** — several of the mechanisms that exist
+for correctness (sessions, lookup tables, cart fragments) also happen to be
+the biggest cost centers if left unmanaged. This page connects those dots
+rather than re-deriving them; each links to where the mechanism is
+documented in full.
+
+## Object caching and sessions
+
+WordPress's object cache (transient/`wp_cache_*` API) is a no-op back end by
+default — `wp_cache_set()` still "works" but nothing survives past the
+request unless a persistent object cache (Redis, Memcached) is installed.
+
+<SafetyLevel level="recommended">
+  Run a persistent object cache on any store with real traffic. WooCommerce
+  reads and writes the customer's session
+  (`woocommerce_sessions` — see
+  [Database](/docs/data-storage/database#what-woocommerces-own-tables-hold))
+  on nearly every request that has a non-empty cart; without a persistent
+  object cache, session storage falls back to a database row read/write on
+  every single one of those requests.
+</SafetyLevel>
+
+## Autoloaded options
+
+Every `wp_options` row with `autoload = 'yes'` is loaded into memory on
+**every** WordPress request, admin or front-end, whether that request needs
+it or not. `wp_options` has no index on `autoload`, so this scan itself gets
+more expensive as the table grows.
+
+WooCommerce and its extensions are frequent contributors: large serialized
+settings arrays, cached API responses stored as options instead of
+transients, and (particularly) session and rate-limit rows that should never
+have been autoloaded in the first place.
+
+<WhereFrom
+  looking={<>A store that feels slow specifically in **wp-admin**, more than on the front end.</>}
+  origin={<>wp-admin is largely uncached, so it pays the full autoloaded-options cost on every screen load — a front-end page behind a page cache does not.</>}
+  controls={<>Every plugin (including WooCommerce and its extensions) that calls `update_option()` without explicitly passing `false` for autoload.</>}
+  safe={<>Audit total autoloaded size (`SELECT SUM(LENGTH(option_value)) FROM wp_options WHERE autoload = 'yes'`) periodically; report an oversized option to the extension that owns it.</>}
+  avoid={<>Flipping autoload to `no` on an option a plugin still expects to be autoloaded — that just moves the same query cost into the request path it runs in, or breaks logic that assumed the value was already in memory.</>}
+/>
+
+## Query and fragment cost
+
+Two mechanisms exist specifically because a naive WordPress query was too
+slow at scale, and both still have a residual cost to manage:
+
+<LayerStack
+  layers={[
+    { name: 'Catalog queries', note: 'Solved by the wc_product_meta_lookup / wc_product_attributes_lookup lookup tables — see Database. Cost reappears if custom code bypasses them and joins wp_postmeta directly for bulk filtering.' },
+    { name: 'Order queries', note: 'Solved by HPOS\'s dedicated tables. A store still on legacy (wp_posts) storage pays the same postmeta-join cost the lookup tables solve for products — see HPOS.' },
+    { name: 'Cart fragments', note: 'An uncached AJAX request (?wc-ajax=get_refreshed_fragments) runs on every page load with the mini-cart script present. WooCommerce only enqueues wc-cart-fragments when a Mini-Cart is actually on the page (since 7.8) — see JavaScript, which documents the cost and the dequeue path.' },
+  ]}
+  caption="Each of these is documented in depth on its own page — this table exists so the performance discussion can point at all three from one place."
+/>
+
+## Extension overhead
+
+A filter or action that runs **once per product in a loop** — a catalog
+page, a cart with many line items, an export — turns any per-call cost
+(an uncached query, an external API call, expensive string formatting) into
+an N+1 problem invisible in isolation but severe at scale.
+
+<SafetyLevel level="risky">
+  Profile with Query Monitor (or equivalent) on a shop/category page with a
+  realistic product count before shipping a filter on
+  `woocommerce_get_price_html`, `woocommerce_product_get_price`, or any other
+  filter that fires per product in a loop. A single added query there is one
+  query times every product on the page.
+</SafetyLevel>
+
+## Headless considerations
+
+A headless build talks to WooCommerce entirely through the
+[Store API](/docs/development/rest-api#store-api) — the classic
+`wc-ajax`/cart-fragments machinery does not apply, since there is no
+server-rendered page for it to refresh. The relevant costs shift to:
+
+- **Cart/session continuity** — the Store API identifies a cart by a
+  `Cart-Token` (JWT) rather than a PHP session cookie; the client is
+  responsible for persisting and resending it.
+- **No fragment cache to lean on** — every cart/checkout render is a fresh
+  API call; caching strategy has to be built into the headless front end
+  itself rather than inherited from server-rendered fragments.
+
+<VerifyNote>confirm whether the Store API's Cart-Token is a signed JWT (vs. an opaque session key) and its exact expiry/refresh behavior in 11.0.1</VerifyNote>
+
+## Related
+
+<Cards>
+  <Card
+    title="Database"
+    href="/docs/data-storage/database"
+    description="The lookup tables that solve catalog query cost."
+  />
+  <Card
+    title="HPOS"
+    href="/docs/data-storage/hpos"
+    description="The order-table equivalent of the lookup-table pattern."
+  />
+  <Card
+    title="JavaScript"
+    href="/docs/development/javascript"
+    description="Cart fragments in full, including the per-request cost and how to dequeue it."
+  />
+</Cards>

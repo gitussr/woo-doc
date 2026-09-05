@@ -1,0 +1,130 @@
+---
+title: Security
+description: The WooCommerce-specific security surface — nonces and capability checks in custom code, PII in orders and customers, payment-data boundaries, and safe AJAX/REST patterns.
+---
+
+<PageMeta priority="P2" audience="Intermediate → Advanced" />
+
+General WordPress hardening (server config, login security, file
+permissions) is out of scope here — this page covers the security surface
+that is specific to building *on* WooCommerce: who is allowed to touch
+order/customer data, where personal and payment data legally and practically
+may not sit, and the request paths (AJAX, REST) attackers actually probe.
+
+## Nonces and capability checks in custom code
+
+These are two different questions and custom code needs both:
+
+<DecisionGuide>
+  <Choice when="the request could be a forged cross-site request (any state-changing AJAX/admin-post call)">
+    Verify a nonce — `check_ajax_referer()` for AJAX,
+    `wp_verify_nonce()` elsewhere. A nonce proves the request came from your
+    own page, not that the requester is *allowed* to do this.
+  </Choice>
+  <Choice when="the action should only be available to certain roles, or only against the current user's own data">
+    Check a capability with `current_user_can()`. A logged-in customer
+    passes any nonce check on your own front-end form; only a capability (or
+    an explicit ownership check) stops them acting on another customer's
+    order.
+  </Choice>
+</DecisionGuide>
+
+<SafetyLevel level="dangerous">
+  A custom My Account endpoint, REST route, or AJAX handler that reads an
+  order or customer by an ID taken from the request **without** confirming
+  it belongs to the current user is an IDOR: any logged-in customer can
+  substitute another order ID and read (or, worse, modify) someone else's
+  data. Check `$order->get_customer_id() === get_current_user_id()` (or the
+  equivalent capability for staff) before returning anything.
+</SafetyLevel>
+
+Relevant built-in capabilities:
+
+| Capability | Grants |
+| --- | --- |
+| `manage_woocommerce` | Store settings, extensions, and everything the Shop Manager role can do |
+| `edit_shop_orders` / `edit_shop_order` | View/edit orders in bulk, or one specific order |
+| `edit_others_shop_orders` | Edit orders not created by the current user (relevant for a multi-staff setup) |
+
+<VerifyNote>confirm the full current capability list (including HPOS-era additions, if any) registered by WooCommerce 11.0.1 for the Shop Manager role vs. custom-order-table access</VerifyNote>
+
+The mechanics of nonces on WooCommerce's own AJAX transports (`wc-ajax` and
+`admin-ajax`) are covered in full on
+[AJAX — Nonces and the params objects](/docs/development/ajax#nonces-and-the-params-objects);
+this section is the capability half that page does not focus on.
+
+## PII in orders and customers
+
+An order carries name, address, email, phone, and IP — all PII — whether or
+not the store is otherwise GDPR-scoped. WooCommerce ships privacy tooling
+that plugs into WordPress core's own personal-data tools rather than
+reinventing them:
+
+<WhereFrom
+  looking={<>**Tools → Export Personal Data / Erase Personal Data** in wp-admin, run against a customer's email.</>}
+  origin={<>`WC_Privacy` (extending `WC_Abstract_Privacy`) registers WooCommerce's own **exporters** and **erasers** — for orders, customer accounts, and download permissions — into WordPress core's personal-data request tools.</>}
+  controls={<>**Settings → Accounts & Privacy** — retention windows that anonymize inactive customer accounts and old orders automatically.</>}
+  safe={<>Registering your own eraser/exporter (via `WC_Abstract_Privacy::add_eraser()` / `add_exporter()`, or the core `wp_privacy_personal_data_eraser` / `_exporter` filters) for any custom order or customer meta your plugin adds that holds personal data.</>}
+  avoid={<>Adding custom PII to order/customer meta with no matching eraser — a fulfilled erasure request then leaves your plugin's data behind, silently.</>}
+/>
+
+<VerifyNote>confirm the exact current hook/filter names and class methods `WC_Privacy` registers erasers/exporters through in 11.0.1 (API may have shifted since the 3.4 GDPR feature introduction)</VerifyNote>
+
+## Payment-data boundaries
+
+WooCommerce core does not store raw card numbers, and a PCI-compliant
+gateway integration should never let them reach your server either — hosted
+fields or an iframe (Stripe Elements, PayPal, and similar) submit the card
+directly to the processor, and your server only ever handles a **token**.
+
+<SafetyLevel level="dangerous">
+  Any custom code that receives or logs a raw PAN, CVV, or full card number —
+  even transiently, even to a debug log — pulls your server into full PCI-DSS
+  scope. Log gateway responses, not raw request payloads; a `WC_Logger` entry
+  is not a secure place for payment details.
+</SafetyLevel>
+
+Stored payment methods live in `woocommerce_payment_tokens` (+ meta) — see
+[Database](/docs/data-storage/database#what-woocommerces-own-tables-hold) —
+holding the token and display metadata (last four digits, card brand,
+expiry), never the full card number.
+
+## Safe AJAX/REST
+
+- **AJAX** — every WooCommerce-provided `wc-ajax`/`admin-ajax` action
+  already nonce-checks; your own handlers must do the same, then a
+  capability check where the action is not purely public. Full pattern on
+  [AJAX](/docs/development/ajax#nonces-and-the-params-objects).
+- **REST API** — a consumer key/secret pair is scoped to Read, Write, or
+  Read/Write, but ultimately executes with the capabilities of the WordPress
+  user it was generated for. A key generated against an over-privileged user
+  is a bigger blast radius than the key's own read/write label suggests —
+  generate integration keys against a dedicated, minimally-privileged user.
+- **Incoming webhooks from a payment processor** — verify the processor's
+  own signature scheme before trusting the payload; see
+  [Payments — Webhooks / IPN](/docs/lifecycle/payments#webhooks--ipn).
+- **WooCommerce's own outgoing webhooks** (Settings → Advanced →
+  Webhooks) sign each delivery with an HMAC-SHA256 hash of the payload,
+  base64-encoded into the `X-WC-Webhook-Signature` header, keyed by a secret
+  set on the webhook. A receiver that does not recompute and compare that
+  signature will accept a forged delivery from anyone who finds the URL.
+
+## Related
+
+<Cards>
+  <Card
+    title="AJAX"
+    href="/docs/development/ajax"
+    description="The nonce mechanics referenced above, in full."
+  />
+  <Card
+    title="REST API"
+    href="/docs/development/rest-api"
+    description="Consumer keys, scopes, and the Store API."
+  />
+  <Card
+    title="Payments"
+    href="/docs/lifecycle/payments"
+    description="Gateway tokenization and webhook/IPN signature verification."
+  />
+</Cards>

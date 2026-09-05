@@ -1,0 +1,129 @@
+---
+title: Debugging
+description: How to diagnose unexpected WooCommerce behavior methodically — logging, the System Status report, plugin-conflict isolation, reading the calculation pipeline, and common failure signatures with their causes.
+---
+
+<PageMeta priority="P1" audience="All levels" />
+
+WooCommerce failures rarely have one cause. A methodical order — check the
+log, check the environment, isolate the conflict, then read the relevant
+pipeline — finds the answer faster than guessing at a hook.
+
+## Logging
+
+`wc_get_logger()` returns a shared PSR-3-style logger (`emergency` down to
+`debug`). Core and most extensions write through it rather than raw
+`error_log()`:
+
+```php
+$logger = wc_get_logger();
+$logger->debug( 'Reached payment step with total ' . $order->get_total(), [ 'source' => 'wd-checkout' ] );
+```
+
+<WhereFrom
+  looking={<>A log entry under <strong>WooCommerce → Status → Logs</strong>.</>}
+  origin={<>Written by <code>WC_Log_Handler_File</code>, the default handler — one file per <code>source</code> per day, under <code>wp-content/uploads/wc-logs/</code>.</>}
+  controls={<>The <code>source</code> key you pass when logging; the storage location is filterable via <code>woocommerce_log_directory</code>, and the handler itself via <code>woocommerce_register_log_handlers</code>.</>}
+  safe={<>Reading logs from the admin **Logs** viewer, or downloading the file directly if you have server access.</>}
+  avoid={<>Logging full request payloads or payment details — a log file is not a secure place for card numbers, tokens, or full customer PII. See <a href="/docs/security#payment-data-boundaries">Security</a>.</>}
+/>
+
+<VerifyNote>confirm current log rotation/retention behavior (file size cap and cleanup schedule) for `WC_Log_Handler_File` in 11.0.1</VerifyNote>
+
+## The status report
+
+**WooCommerce → Status** is the first stop for any "why is this broken"
+question:
+
+<LayerStack
+  layers={[
+    { name: 'System Status tab', note: 'WordPress/server environment, active theme, active plugins with version + whether each is out of date, database version and table check, and every overridden template with its version compared to core' },
+    { name: 'Get system report', note: 'Renders the same data as a single copyable/downloadable report — the thing to attach to a support request rather than a screenshot' },
+    { name: 'Logs tab', note: 'Browse and download the wc-logs/ files by source and date' },
+    { name: 'Tools tab', note: 'One-off maintenance actions: clear expired transients, recount terms, regenerate the product lookup table, reset the shop_manager/customer default capabilities' },
+  ]}
+  caption="Read top to bottom before touching code — most 'WooCommerce is broken' reports are an out-of-date override or a plugin conflict visible right here."
+/>
+
+<SafetyLevel level="recommended">
+  An **out-of-date template** ("version X is out of date. The core version
+  is Y") on this page is a leading cause of "this update broke my site" —
+  see [Templates](/docs/development/templates#overriding-a-template-in-a-theme).
+  Check this list before assuming the bug is in WooCommerce itself.
+</SafetyLevel>
+
+## Hook tracing
+
+Tracing which hooks actually fire (and in what order) on a given request is
+covered in depth on
+[Hooks — Debugging which hooks fire](/docs/development/hooks#debugging-which-hooks-fire):
+the `all` hook trick, reading `wc-template-hooks.php`, and the Query Monitor
+plugin, which lists every hook fired on a request with its registered
+callbacks and file locations. Reach for that page once logging and the
+status report have ruled out an environment problem.
+
+## Plugin-conflict isolation
+
+WooCommerce sits between WordPress core, the theme, and every other plugin —
+most "WooCommerce is doing something weird" reports are actually a
+third-party callback on a WooCommerce hook.
+
+<Lifecycle
+  steps={[
+    'Enable WP_DEBUG / WP_DEBUG_LOG and reproduce the issue — read wp-content/debug.log for a PHP notice/warning/fatal at the moment it happens',
+    'Switch to a default theme (Twenty Twenty-Four or similar) — rules out template overrides and theme-hooked functions',
+    'Deactivate every plugin except WooCommerce, then reproduce — if it is now gone, the cause is a plugin',
+    'Re-activate plugins one at a time, reproducing after each, until the issue returns',
+    'On the plugin that reproduces it, use Query Monitor or the `all`-hook trace to find the specific callback',
+  ]}
+  caption="The standard WordPress bisection — deliberately blunt because it is reliable. Do this on staging or with a tool that lets you troubleshoot without affecting live visitors."
+/>
+
+<Callout type="info">
+  A "Troubleshooting" / "Health Check" style plugin that lets *you* see the
+  site with plugins disabled while other visitors still see the live site is
+  the safe way to run this bisection in production.
+</Callout>
+
+## Reading the calculation pipeline
+
+"The cart/order total is wrong" is common enough to warrant its own entry
+point: the pipeline is
+[`WC_Cart_Totals`](/docs/lifecycle/cart#the-totals-calculation-pipeline), invoked from
+`WC_Cart::calculate_totals()` on the `woocommerce_before_calculate_totals`
+→ calculate → `woocommerce_after_calculate_totals` sequence. A breakpoint or
+temporary log line at the start and end of that method, dumping cart
+contents and fees, isolates whether a plugin changed an item's price
+(`woocommerce_before_calculate_totals`) or whether the discrepancy is in
+tax/shipping/coupon math WooCommerce computed itself.
+
+## Common failure signatures
+
+| Symptom | Likely cause | Where to look |
+| --- | --- | --- |
+| White screen after activating a plugin/update | PHP fatal error | `wp-content/debug.log`, or your host's PHP error log |
+| Checkout hangs on "Place order" with no error | A JS error stopped `checkout.js`, or a `woocommerce_checkout_process`/`_before_order_pay` callback exited without a WooCommerce-aware error | Browser console; then the checkout hooks on [AJAX](/docs/development/ajax) |
+| Transactional emails not arriving | `wp_mail()` failing silently (no configured SMTP), or the email is disabled in **Settings → Emails** | **Status → Logs**, source `emails`; see [Emails](/docs/lifecycle/emails) |
+| Prices/stock briefly wrong after a product save | A caching layer (object cache or page cache) serving a stale page before the [lookup table](/docs/data-storage/database#why-the-lookup-tables-exist) sync completed | Purge the relevant cache; confirm the lookup table row updated |
+| REST API request returns 401 | Bad or revoked consumer key/secret, wrong permission level for the requested method | **Settings → Advanced → REST API**; see [REST API](/docs/development/rest-api) |
+| A hook callback "never fires" | Registered after the action already ran, or firing only in a request context (admin/REST/cron) the callback wasn't registered for | [Hooks — Debugging which hooks fire](/docs/development/hooks#debugging-which-hooks-fire) |
+
+## Related
+
+<Cards>
+  <Card
+    title="Hooks (Actions)"
+    href="/docs/development/hooks"
+    description="Hook-tracing tools this page points to rather than repeats."
+  />
+  <Card
+    title="Cart"
+    href="/docs/lifecycle/cart"
+    description="The totals pipeline referenced above, in depth."
+  />
+  <Card
+    title="Performance"
+    href="/docs/performance"
+    description="When the symptom is slow rather than wrong."
+  />
+</Cards>

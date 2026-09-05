@@ -94,12 +94,27 @@ cleanup` is a separate explicit step, and even then a `shop_order_placehold`
 placeholder post is kept per order. No open `VerifyNote` tags remain in
 `content/docs/data-storage/`.
 
-Next: Phase 6 (customization, debugging, operations) — see roadmap:
-customization patterns (template strategy, plugin vs mu-plugin vs child
-theme, Blocks customization), debugging (logging, status report, hook
-tracing, plugin-conflict isolation), performance (object caching, autoloaded
-options, query/fragment cost), security (nonces, capability checks, PII in
-orders, payment-data boundaries).
+Phase 6 (Customization, debugging, operations) content is **drafted**: four
+flat pages at `content/docs/customization.mdx`, `debugging.mdx`,
+`performance.mdx`, `security.mdx` (matching the flat, non-grouped shape these
+four have in the IA tree — unlike Commerce Lifecycle / Data & Storage, they
+are not a folder), wired into root `meta.json` after `data-storage`. IA
+"How this maps to the current site" updated. Each page is written as the
+*applied* companion to material Development/Foundations/Lifecycle/Data &
+Storage already document in depth — it links out rather than repeating
+mechanics (e.g. hook-tracing lives on `development/hooks.mdx`, cart-fragment
+cost on `development/javascript.mdx`, nonce mechanics on
+`development/ajax.mdx`) — per the IA's "does not belong here" notes for each
+section. 5 `VerifyNote` tags remain, one or two per page: the current
+simple-product admin-field hook pair (`customization.mdx`), `WC_Log_Handler_File`
+rotation/retention behavior (`debugging.mdx`), the Store API `Cart-Token`
+format/expiry (`performance.mdx`), and the current Shop-Manager capability
+list plus `WC_Privacy` eraser/exporter hook names (`security.mdx`).
+
+Next: finish the Phase 6 accuracy pass (resolve those 5 `VerifyNote` tags
+against WooCommerce 11.0.1 core source / developer docs), then Phase 7
+(honesty and depth — Limitations, advanced topics, diagram pass) — see
+roadmap.
 
 Remaining `VerifyNote` tags elsewhere: `about/design-system.mdx` only, as
 intentional component demos.
